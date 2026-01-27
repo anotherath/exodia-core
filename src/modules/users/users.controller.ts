@@ -7,11 +7,11 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post('active')
-  activateUser(@Body() body: ISignKeyInfo) {
-    let isActive = this.usersService.activeUser(body);
+  async activateUser(@Body() body: ISignKeyInfo) {
+    const isActive = await this.usersService.activeUser(body);
 
     return {
-      isActive: isActive,
+      isActive,
       walletAddress: body.walletAddress,
     };
   }

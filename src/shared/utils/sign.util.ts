@@ -1,14 +1,19 @@
-import { ethers } from 'ethers';
 import { ISignKeyInfo } from '../types/input.type';
+import { recoverMessageAddress } from 'viem';
 
-export function verifySignature(SignKeyInfo: ISignKeyInfo): boolean {
-  const { walletAddress, signature, message } = SignKeyInfo;
+export async function verifySignature(
+  signKeyInfo: ISignKeyInfo,
+): Promise<boolean> {
+  const { walletAddress, signature, message } = signKeyInfo;
 
   try {
-    const recoveredAddress = ethers.verifyMessage(message, signature);
+    const recoveredAddress = await recoverMessageAddress({
+      message,
+      signature,
+    });
 
     return recoveredAddress.toLowerCase() === walletAddress.toLowerCase();
-  } catch (err) {
+  } catch {
     return false;
   }
 }

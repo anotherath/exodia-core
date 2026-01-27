@@ -4,13 +4,10 @@ import { verifySignature } from 'src/shared/utils/sign.util';
 
 @Injectable()
 export class UsersService {
-  activeUser(signKeyInfo: ISignKeyInfo) {
-    // if (!veryfiMessage(signKeyInfo)) {
-    //   console.log('loi veryfi message');
-    //   return false;
-    // }
+  async activeUser(signKeyInfo: ISignKeyInfo): Promise<boolean> {
+    const verify = await verifySignature(signKeyInfo);
 
-    if (!verifySignature(signKeyInfo)) {
+    if (!verify) {
       console.log('loi veryfi chu ky');
       return false;
     }

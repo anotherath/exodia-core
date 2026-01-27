@@ -1,5 +1,5 @@
 export class ISignKeyInfo {
-  walletAddress: string;
-  signature: string;
+  walletAddress: `0x${string}`;
+  signature: `0x${string}`;
   message: string;
 }
