@@ -18,7 +18,7 @@ export class UsersController {
 
   @Get('nounce')
   async getNounce(@Query('walletAddress') walletAddress: HexString) {
-    const nounce = await this.getNounce(walletAddress);
+    const nounce = await this.usersService.createNonce(walletAddress);
 
     return {
       nounce: nounce,

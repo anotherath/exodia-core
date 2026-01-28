@@ -29,7 +29,15 @@ export class UsersService {
     return isActive;
   }
 
-  createNounce(walletAddress: HexString): string {
+  getNonce(walletAddress: HexString): string | null {
+    const nounce = null;
+
+    //viet logic lấy nonce trong db tai day, nếu không có thì trả về false
+
+    return nounce;
+  }
+
+  createNonce(walletAddress: HexString): string {
     const nounce = generateNonce();
 
     //viet them logic them so nounce vao db cung voi wallet

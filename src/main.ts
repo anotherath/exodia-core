@@ -1,8 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { UsersModule } from './modules/users/users.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import 'dotenv/config';
+import { connectMongoDB } from './infra/mongodb';
 
 async function bootstrap() {
+  await connectMongoDB();
   const app = await NestFactory.create(UsersModule);
 
   const config = new DocumentBuilder()
@@ -16,4 +19,5 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 }
+
 bootstrap();
