@@ -1,4 +1,4 @@
-import { ISignKeyInfo } from '../types/input.type';
+import { ISignKeyInfo } from '../types/web3.type';
 import { recoverMessageAddress } from 'viem';
 
 export async function verifySignature(
