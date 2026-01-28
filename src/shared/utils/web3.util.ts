@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { ISignKeyInfo } from '../types/web3.type';
 import { recoverMessageAddress } from 'viem';
 
@@ -17,6 +18,12 @@ export async function verifySignature(
     return false;
   }
 }
+
+export function generateNonce(length = 16): string {
+  return randomBytes(length).toString('hex');
+}
+
+export const isHexString = (v: string) => /^0x[a-fA-F0-9]+$/.test(v);
 
 // export function veryfiMessage(SignKeyInfo: ISignKeyInfo): boolean {
 //   const parsed = JSON.parse(SignKeyInfo.message);

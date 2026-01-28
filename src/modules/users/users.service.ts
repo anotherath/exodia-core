@@ -1,10 +1,13 @@
 import { flatten, Injectable } from '@nestjs/common';
+import { NonceRepository } from 'src/repositories/nonce.repository';
 import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
-import { generateNonce } from 'src/shared/utils/nounce.util';
-import { verifySignature } from 'src/shared/utils/sign.util';
+import { generateNonce } from 'src/shared/utils/web3.util';
+import { verifySignature } from 'src/shared/utils/web3.util';
 
 @Injectable()
 export class UsersService {
+  constructor(private readonly nonceRepo: NonceRepository) {}
+
   async activeUser(signKeyInfo: ISignKeyInfo): Promise<boolean> {
     const verify = await verifySignature(signKeyInfo);
 
@@ -29,19 +32,12 @@ export class UsersService {
     return isActive;
   }
 
-  getNonce(walletAddress: HexString): string | null {
-    const nounce = null;
+  async getNonce(walletAddress: HexString): Promise<string | null> {
+    const nonceInfo = await this.nonceRepo.findValid(walletAddress);
 
-    //viet logic lấy nonce trong db tai day, nếu không có thì trả về false
+    if (nonceInfo) return nonceInfo.nonce;
 
-    return nounce;
-  }
-
-  createNonce(walletAddress: HexString): string {
-    const nounce = generateNonce();
-
-    //viet them logic them so nounce vao db cung voi wallet
-
-    return nounce;
+    const newNonce = await this.nonceRepo.upsert(walletAddress);
+    return newNonce.nonce;
   }
 }

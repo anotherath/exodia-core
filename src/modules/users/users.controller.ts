@@ -1,6 +1,14 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
+import { isHexString } from 'src/shared/utils/web3.util';
 
 @Controller('users')
 export class UsersController {
@@ -17,8 +25,12 @@ export class UsersController {
   }
 
   @Get('nounce')
-  async getNounce(@Query('walletAddress') walletAddress: HexString) {
-    const nounce = await this.usersService.createNonce(walletAddress);
+  async getNonce(@Query('walletAddress') walletAddress: HexString) {
+    if (!isHexString(walletAddress)) {
+      throw new BadRequestException('walletAddress is required');
+    }
+
+    const nounce = await this.usersService.getNonce(walletAddress);
 
     return {
       nounce: nounce,
