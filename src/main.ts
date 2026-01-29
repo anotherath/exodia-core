@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { UsersModule } from './modules/users/users.module';
+import { UsersModule } from './modules/user/user.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import 'dotenv/config';
 import { connectMongoDB } from './infra/mongodb';
