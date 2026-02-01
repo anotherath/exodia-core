@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { NonceRepository } from 'src/repositories/nonce.repository';
-import { UserRepository } from 'src/repositories/user.repository';
+import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { UserRepository } from 'src/repositories/user/user.repository';
 import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
 import { verifySignature } from 'src/shared/utils/web3.util';
 
