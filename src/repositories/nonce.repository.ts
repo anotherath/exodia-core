@@ -8,18 +8,18 @@ export class NonceRepository {
   // tạo nonce info
   buildNonceInfo(walletAddress: string): NonceInfo {
     return {
-      walletAddress,
+      walletAddress: walletAddress.toLowerCase(),
       nonce: generateNonce(),
       expiresAt: new Date(Date.now() + this.EXPIRE_MS),
     };
   }
 
-  // up nonce info lên db
+  // tạo hoặc ghi đè nonce (1 wallet chỉ có 1 nonce hợp lệ)
   async upsert(walletAddress: string): Promise<NonceInfo> {
     const nonceInfo = this.buildNonceInfo(walletAddress);
 
     await NonceModel.updateOne(
-      { walletAddress },
+      { walletAddress: nonceInfo.walletAddress },
       { $set: nonceInfo },
       { upsert: true },
     );
@@ -27,16 +27,18 @@ export class NonceRepository {
     return nonceInfo;
   }
 
-  // tìm nonce info trong db
+  // tìm nonce còn hiệu lực
   async findValid(walletAddress: string): Promise<NonceInfo | null> {
     return NonceModel.findOne({
-      walletAddress,
+      walletAddress: walletAddress.toLowerCase(),
       expiresAt: { $gt: new Date() },
-    });
+    }).lean();
   }
 
-  // xóa nonce info khoi db
-  async delete(walletAddress: string) {
-    return NonceModel.deleteOne({ walletAddress });
+  // xóa nonce sau khi dùng
+  async delete(walletAddress: string): Promise<void> {
+    await NonceModel.deleteOne({
+      walletAddress: walletAddress.toLowerCase(),
+    });
   }
 }
