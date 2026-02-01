@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { mongodbConfig } from '../config/mongodb.config';
+import { mongodbConfig } from 'src/config/mongodb.config';
 
 export async function connectMongoDB() {
   try {
