@@ -5,7 +5,7 @@ import { AppModule } from './app.module';
 import { connectMongoDB } from './infra/mongodb/mongodb';
 
 async function bootstrap() {
-  // await connectMongoDB();
+  await connectMongoDB();
   const app = await NestFactory.create(AppModule);
 
   const config = new DocumentBuilder()

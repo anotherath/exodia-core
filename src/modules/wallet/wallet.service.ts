@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { HexString } from 'src/shared/types/web3.type';
-import { WalletRepository } from 'src/repositories/wallet.repository';
+import { WalletRepository } from 'src/repositories/wallet/wallet.repository';
 
 @Injectable()
 export class WalletService {
