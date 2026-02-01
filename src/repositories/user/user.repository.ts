@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { UserModel } from './models/user.model';
+import { UserModel } from './user.model';
 import { User } from 'src/shared/types/user.type';
 
 @Injectable()

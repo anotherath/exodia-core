@@ -1,5 +1,5 @@
 // src/repositories/wallet.repository.ts
-import { WalletModel } from './models/wallet.model';
+import { WalletModel } from './wallet.model';
 import { Wallet } from 'src/shared/types/wallet.type';
 
 export class WalletRepository {

@@ -1,5 +1,5 @@
 import { NonceInfo } from 'src/shared/types/web3.type';
-import { NonceModel } from './models/nonce.model';
+import { NonceModel } from './nonce.model';
 import { generateNonce } from 'src/shared/utils/web3.util';
 
 export class NonceRepository {
