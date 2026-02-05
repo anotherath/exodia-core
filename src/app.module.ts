@@ -5,6 +5,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { RealTimeModule } from './modules/realtime-market/realtime-market.module';
 import { MarketModule } from './modules/market/market.module';
 import { PairModule } from './modules/pair/pair.module';
+import { PositionModule } from './modules/position/position.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { PairModule } from './modules/pair/pair.module';
     WalletModule,
     MarketModule,
     PairModule,
+    PositionModule,
   ],
 })
 export class AppModule {}
