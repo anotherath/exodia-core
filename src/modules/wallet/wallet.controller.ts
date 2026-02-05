@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query } from '@nestjs/common';
 import type { HexString } from 'src/shared/types/web3.type';
 import { WalletService } from './wallet.service';
 
@@ -22,5 +22,45 @@ export class WalletController {
       chainId: Number(chainId),
       wallet,
     };
+  }
+
+  // POST /wallet/lock
+  @Post('lock')
+  async lockBalance(
+    @Body()
+    body: {
+      walletAddress: HexString;
+      chainId: number;
+      amount: string;
+    },
+  ) {
+    await this.walletService.lockBalance(
+      body.walletAddress,
+      body.chainId,
+      body.amount,
+    );
+
+    return { success: true };
+  }
+
+  // POST /wallet/unlock
+  @Post('unlock')
+  async unlockBalance(
+    @Body()
+    body: {
+      walletAddress: HexString;
+      chainId: number;
+      lockedAmount: string;
+      finalAmount: string;
+    },
+  ) {
+    await this.walletService.unlockBalance(
+      body.walletAddress,
+      body.chainId,
+      body.lockedAmount,
+      body.finalAmount,
+    );
+
+    return { success: true };
   }
 }
