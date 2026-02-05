@@ -2,11 +2,11 @@ export interface Wallet {
   walletAddress: string;
   chainId: number;
 
-  balance: string; // USDT khả dụng
-  lockedBalance: string; // USDT đang vào vị thế
+  balance: number; // USDT khả dụng
+  lockedBalance: number; // USDT đang vào vị thế
 
-  totalDeposited: string;
-  totalWithdrawn: string;
+  totalDeposited: number;
+  totalWithdrawn: number;
 
   updatedAt?: Date;
   createdAt?: Date;

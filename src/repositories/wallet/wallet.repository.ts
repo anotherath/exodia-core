@@ -72,18 +72,17 @@ export class WalletRepository {
 
   // Khi đóng position:
   // - Giải phóng lockedAmount khỏi lockedBalance
-  // - Cộng finalAmount vào balance
+  // - Cộng lockedAmount vào balance
   async unlockBalance(
     walletAddress: string,
     chainId: number,
     lockedAmount: string,
-    finalAmount: string,
   ) {
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: Number(finalAmount), // số tiền thực nhận
+          balance: Number(lockedAmount), // số tiền thực nhận
           lockedBalance: -Number(lockedAmount), // giải phóng tiền khoá
         },
       },

@@ -15,21 +15,21 @@ const WalletSchema = new Schema<Wallet>(
     },
 
     balance: {
-      type: String,
-      default: '0',
+      type: Number,
+      default: 0,
     },
     lockedBalance: {
-      type: String,
-      default: '0',
+      type: Number,
+      default: 0,
     },
 
     totalDeposited: {
-      type: String,
-      default: '0',
+      type: Number,
+      default: 0,
     },
     totalWithdrawn: {
-      type: String,
-      default: '0',
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true },

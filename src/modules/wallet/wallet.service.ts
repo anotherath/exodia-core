@@ -22,13 +22,7 @@ export class WalletService {
     walletAddress: string,
     chainId: number,
     lockedAmount: string,
-    finalAmount: string,
   ) {
-    await this.repo.unlockBalance(
-      walletAddress,
-      chainId,
-      lockedAmount,
-      finalAmount,
-    );
+    await this.repo.unlockBalance(walletAddress, chainId, lockedAmount);
   }
 }
