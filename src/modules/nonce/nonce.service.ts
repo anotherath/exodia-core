@@ -6,7 +6,7 @@ import type { HexString } from 'src/shared/types/web3.type';
 export class NonceService {
   constructor(private readonly nonceRepo: NonceRepository) {}
 
-  async getNonce(walletAddress: HexString): Promise<string | null> {
+  async getNonce(walletAddress: HexString): Promise<string> {
     const nonceInfo = await this.nonceRepo.findValid(walletAddress);
 
     if (nonceInfo) return nonceInfo.nonce;
