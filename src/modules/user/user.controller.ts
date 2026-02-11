@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Query } from '@nestjs/common';
 import { UserService } from './user.service';
-import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
+import type { HexString } from 'src/shared/types/web3.type';
+import type { ActivateUserValue } from 'src/shared/types/eip712.type';
 
 @Controller('user')
 export class UserController {
@@ -17,11 +18,17 @@ export class UserController {
   }
 
   @Post('post-active-user')
-  async activateUser(@Body() body: ISignKeyInfo) {
-    const isActive = await this.usersService.activeUser(body);
+  async activateUser(
+    @Body() body: ActivateUserValue & { signature: HexString },
+  ) {
+    const { signature, ...typedData } = body;
+    const isActive = await this.usersService.activeUser(
+      typedData as ActivateUserValue,
+      signature,
+    );
 
     return {
-      walletAddress: body.walletAddress,
+      walletAddress: typedData.walletAddress,
       isActive,
     };
   }

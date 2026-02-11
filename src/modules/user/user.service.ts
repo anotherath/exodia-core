@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { UserRepository } from 'src/repositories/user/user.repository';
-import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
+import type { HexString } from 'src/shared/types/web3.type';
 import {
-  verifySignature,
-  extractNonceFromMessage,
-} from 'src/shared/utils/web3.util';
+  ActivateUserTypes,
+  type ActivateUserValue,
+} from 'src/shared/types/eip712.type';
+import { verifyAndConsumeNonce } from 'src/shared/utils/eip712.util';
 
 @Injectable()
 export class UserService {
@@ -14,36 +15,33 @@ export class UserService {
     private readonly userRepo: UserRepository,
   ) {}
 
-  //kích hoạt người dùng
-  async activeUser(signKeyInfo: ISignKeyInfo): Promise<boolean> {
-    // kiểm tra số nonce
-    const nonce = await this.nonceRepo.findValid(signKeyInfo.walletAddress);
-    if (!nonce) {
-      console.log('nonce khong hop le hoac het han');
+  // kích hoạt người dùng (Login via EIP-712)
+  async activeUser(
+    typedData: ActivateUserValue,
+    signature: HexString,
+  ): Promise<boolean> {
+    try {
+      // Xác thực nonce và chữ ký EIP-712
+      // Hàm này sẽ throw BadRequestException nếu sai nonce hoặc sai chữ ký
+      await verifyAndConsumeNonce(this.nonceRepo, {
+        walletAddress: typedData.walletAddress as HexString,
+        nonce: typedData.nonce,
+        signature,
+        types: ActivateUserTypes,
+        primaryType: 'ActivateUser',
+        message: typedData as unknown as Record<string, unknown>,
+      });
+
+      // Nếu xác thực thành công, kích hoạt user
+      await this.userRepo.upsert(typedData.walletAddress, {
+        isActive: true,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Active user failed:', error.message);
       return false;
     }
-
-    const nonceFromMessage = extractNonceFromMessage(signKeyInfo.message);
-    if (nonce.nonce !== nonceFromMessage) {
-      console.log('nonce trong message khong khop');
-      return false;
-    }
-
-    // verify chữ ký
-    const verify = await verifySignature(signKeyInfo);
-    if (!verify) {
-      console.log('loi verify chu ky');
-      return false;
-    }
-
-    // thêm user
-    await this.userRepo.upsert(signKeyInfo.walletAddress, {
-      isActive: true,
-    });
-
-    // xóa nonce
-    await this.nonceRepo.delete(signKeyInfo.walletAddress);
-    return true;
   }
 
   // kiểm tra xem người dùng active hay chưa

@@ -98,3 +98,18 @@ export interface UpdatePositionValue {
   leverage: bigint;
   nonce: string;
 }
+
+// ===== ACTIVATE USER =====
+export const ActivateUserTypes = {
+  ActivateUser: [
+    { name: 'walletAddress', type: 'address' },
+    { name: 'nonce', type: 'string' },
+    { name: 'timestamp', type: 'string' },
+  ],
+} as const;
+
+export interface ActivateUserValue {
+  walletAddress: string;
+  nonce: string;
+  timestamp: string;
+}
