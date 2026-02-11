@@ -1,5 +1,6 @@
 import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { TickerData } from 'src/shared/types/okx.type';
 
 @WebSocketGateway({
   cors: { origin: '*' },
@@ -9,7 +10,10 @@ export class RealTimeGateway {
   @WebSocketServer()
   server: Server;
 
-  emitTicker(data: any) {
-    this.server.emit('ticker', data);
+  /**
+   * Broadcast ticker data to all connected clients.
+   */
+  emitTicker(ticker: TickerData) {
+    this.server.emit('ticker', ticker);
   }
 }

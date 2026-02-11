@@ -1,75 +1,119 @@
+import { Test, TestingModule } from '@nestjs/testing';
 import { PairService } from '../pair.service';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
-import { connectTestDB, closeTestDB } from 'test/mongo-memory';
-import { PairModel } from 'src/repositories/pair/pair.model';
+import { OkxWs } from 'src/infra/okx/okx.ws';
+import { Pair } from 'src/shared/types/pair.type';
 
 describe('PairService', () => {
   let service: PairService;
-  let pairRepo: PairRepository;
+  let repo: PairRepository;
+  let okxWs: OkxWs;
 
-  beforeAll(async () => {
-    await connectTestDB();
-    pairRepo = new PairRepository();
-    service = new PairService(pairRepo);
-  });
+  const mockPair: Pair = {
+    instId: 'BTC-USDT',
+    maxLeverage: 100,
+    isActive: true,
+  };
 
-  afterAll(async () => {
-    await closeTestDB();
-  });
+  const mockPairRepo = {
+    findAllActive: jest.fn(),
+    findAll: jest.fn(),
+    findByInstId: jest.fn(),
+    upsert: jest.fn(),
+    updateStatus: jest.fn(),
+    delete: jest.fn(),
+  };
+
+  const mockOkxWs = {
+    subscribe: jest.fn(),
+    unsubscribe: jest.fn(),
+  };
 
   beforeEach(async () => {
-    await PairModel.deleteMany({});
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        PairService,
+        { provide: PairRepository, useValue: mockPairRepo },
+        { provide: OkxWs, useValue: mockOkxWs },
+      ],
+    }).compile();
+
+    service = module.get<PairService>(PairService);
+    repo = module.get<PairRepository>(PairRepository);
+    okxWs = module.get<OkxWs>(OkxWs);
+
+    jest.clearAllMocks();
   });
 
-  it('should return all active pairs', async () => {
-    const activePairs = [
-      { instId: 'BTC-USDT', maxLeverage: 100, isActive: true },
-      { instId: 'ETH-USDT', maxLeverage: 50, isActive: true },
-    ];
-    const inactivePair = {
-      instId: 'SOL-USDT',
-      maxLeverage: 20,
-      isActive: false,
-    };
+  describe('upsertPair', () => {
+    it('should upsert and subscribe if pair is active', async () => {
+      mockPairRepo.upsert.mockResolvedValue(mockPair);
 
-    await PairModel.insertMany([...activePairs, inactivePair]);
+      const result = await service.upsertPair(mockPair);
 
-    const result = await service.getAllActive();
+      expect(repo.upsert).toHaveBeenCalledWith(mockPair);
+      expect(okxWs.subscribe).toHaveBeenCalledWith([mockPair.instId]);
+      expect(okxWs.unsubscribe).not.toHaveBeenCalled();
+      expect(result).toEqual(mockPair);
+    });
 
-    expect(result).toHaveLength(2);
-    expect(result).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ instId: 'BTC-USDT' }),
-        expect.objectContaining({ instId: 'ETH-USDT' }),
-      ]),
-    );
-    expect(result).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ instId: 'SOL-USDT' })]),
-    );
+    it('should upsert and unsubscribe if pair is inactive', async () => {
+      const inactivePair = { ...mockPair, isActive: false };
+      mockPairRepo.upsert.mockResolvedValue(inactivePair);
+
+      const result = await service.upsertPair(inactivePair);
+
+      expect(repo.upsert).toHaveBeenCalledWith(inactivePair);
+      expect(okxWs.unsubscribe).toHaveBeenCalledWith([mockPair.instId]);
+      expect(okxWs.subscribe).not.toHaveBeenCalled();
+      expect(result).toEqual(inactivePair);
+    });
   });
 
-  it('should return a pair by instId if it is active', async () => {
-    const instId = 'BTC-USDT';
-    await PairModel.create({ instId, maxLeverage: 100, isActive: true });
+  describe('updateStatus', () => {
+    it('should update status and subscribe if isActive is true', async () => {
+      mockPairRepo.updateStatus.mockResolvedValue({
+        ...mockPair,
+        isActive: true,
+      });
 
-    const result = await service.getByInstId(instId);
+      await service.updateStatus('BTC-USDT', true);
 
-    expect(result).not.toBeNull();
-    expect(result?.instId).toBe(instId);
+      expect(repo.updateStatus).toHaveBeenCalledWith('BTC-USDT', true);
+      expect(okxWs.subscribe).toHaveBeenCalledWith(['BTC-USDT']);
+    });
+
+    it('should update status and unsubscribe if isActive is false', async () => {
+      mockPairRepo.updateStatus.mockResolvedValue({
+        ...mockPair,
+        isActive: false,
+      });
+
+      await service.updateStatus('BTC-USDT', false);
+
+      expect(repo.updateStatus).toHaveBeenCalledWith('BTC-USDT', false);
+      expect(okxWs.unsubscribe).toHaveBeenCalledWith(['BTC-USDT']);
+    });
+
+    it('should return null if pair not found', async () => {
+      mockPairRepo.updateStatus.mockResolvedValue(null);
+
+      const result = await service.updateStatus('UNKNOWN', true);
+
+      expect(result).toBeNull();
+      expect(okxWs.subscribe).not.toHaveBeenCalled();
+    });
   });
 
-  it('should return null if pair by instId is inactive', async () => {
-    const instId = 'SOL-USDT';
-    await PairModel.create({ instId, maxLeverage: 20, isActive: false });
+  describe('deletePair', () => {
+    it('should delete and unsubscribe', async () => {
+      mockPairRepo.delete.mockResolvedValue({ deletedCount: 1 });
 
-    const result = await service.getByInstId(instId);
+      const result = await service.deletePair('BTC-USDT');
 
-    expect(result).toBeNull();
-  });
-
-  it('should return null if pair by instId does not exist', async () => {
-    const result = await service.getByInstId('NON-EXISTENT');
-
-    expect(result).toBeNull();
+      expect(repo.delete).toHaveBeenCalledWith('BTC-USDT');
+      expect(okxWs.unsubscribe).toHaveBeenCalledWith(['BTC-USDT']);
+      expect(result.success).toBe(true);
+    });
   });
 });
