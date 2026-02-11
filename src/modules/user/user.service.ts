@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { UserRepository } from 'src/repositories/user/user.repository';
 import type { HexString } from 'src/shared/types/web3.type';
@@ -6,7 +6,7 @@ import {
   ActivateUserTypes,
   type ActivateUserValue,
 } from 'src/shared/types/eip712.type';
-import { verifyAndConsumeNonce } from 'src/shared/utils/eip712.util';
+import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 
 @Injectable()
 export class UserService {
@@ -21,19 +21,32 @@ export class UserService {
     signature: HexString,
   ): Promise<boolean> {
     try {
-      // Xác thực nonce và chữ ký EIP-712
-      // Hàm này sẽ throw BadRequestException nếu sai nonce hoặc sai chữ ký
-      await verifyAndConsumeNonce(this.nonceRepo, {
-        walletAddress: typedData.walletAddress as HexString,
-        nonce: typedData.nonce,
+      const walletAddress = typedData.walletAddress as HexString;
+
+      // 1. Kiểm tra nonce hợp lệ trong DB
+      const nonceInfo = await this.nonceRepo.findValid(walletAddress);
+      if (!nonceInfo || nonceInfo.nonce !== typedData.nonce) {
+        throw new BadRequestException('Nonce không hợp lệ hoặc đã hết hạn');
+      }
+
+      // 2. Verify chữ ký EIP-712
+      const isValid = await verifyTypedDataSignature({
+        walletAddress,
         signature,
         types: ActivateUserTypes,
         primaryType: 'ActivateUser',
         message: typedData as unknown as Record<string, unknown>,
       });
 
-      // Nếu xác thực thành công, kích hoạt user
-      await this.userRepo.upsert(typedData.walletAddress, {
+      if (!isValid) {
+        throw new BadRequestException('Chữ ký không hợp lệ');
+      }
+
+      // 3. Xóa nonce sau khi verify thành công
+      await this.nonceRepo.delete(walletAddress);
+
+      // 4. Nếu xác thực thành công, kích hoạt user
+      await this.userRepo.upsert(walletAddress, {
         isActive: true,
       });
 

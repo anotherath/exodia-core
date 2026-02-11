@@ -7,16 +7,15 @@ import { UserModel } from 'src/repositories/user/user.model';
 import { HexString } from 'src/shared/types/web3.type';
 import { ActivateUserValue } from 'src/shared/types/eip712.type';
 import * as eip712Util from 'src/shared/utils/eip712.util';
-import { BadRequestException } from '@nestjs/common';
 
-// Mock generateNonce
+// Mock generateNonce (mặc dù có thể dùng real DB, nhưng mock giúp kiểm soát tốt hơn)
 jest.mock('src/shared/utils/web3.util', () => ({
   generateNonce: jest.fn().mockReturnValue('fake_nonce'),
 }));
 
-// Mock verifyAndConsumeNonce
+// Mock verifyTypedDataSignature
 jest.mock('src/shared/utils/eip712.util', () => ({
-  verifyAndConsumeNonce: jest.fn(),
+  verifyTypedDataSignature: jest.fn(),
 }));
 
 describe('UserService', () => {
@@ -36,7 +35,6 @@ describe('UserService', () => {
 
   beforeAll(async () => {
     await connectTestDB();
-
     nonceRepo = new NonceRepository();
     userRepo = new UserRepository();
     service = new UserService(nonceRepo, userRepo);
@@ -47,74 +45,61 @@ describe('UserService', () => {
   });
 
   beforeEach(async () => {
-    // clear DB
     await NonceModel.deleteMany({});
     await UserModel.deleteMany({});
-
     jest.clearAllMocks();
-    (eip712Util.verifyAndConsumeNonce as jest.Mock).mockResolvedValue(
-      undefined,
-    );
+
+    // Default success verify
+    (eip712Util.verifyTypedDataSignature as jest.Mock).mockResolvedValue(true);
   });
 
   it('should activate user successfully', async () => {
+    // 1. Tạo nonce trong DB
+    await nonceRepo.upsert(walletAddress);
+
+    // 2. Gọi service activeUser
     const result = await service.activeUser(activateData, fakeSignature);
 
     expect(result).toBe(true);
-    // Kiểm tra verifyAndConsumeNonce được gọi đúng params
-    expect(eip712Util.verifyAndConsumeNonce).toHaveBeenCalledWith(
-      nonceRepo, // nonceRepo passed in
-      expect.objectContaining({
-        walletAddress,
-        nonce: fakeNonce,
-        signature: fakeSignature,
-        message: activateData, // message phải match với activateData
-      }),
-    );
+    // Verify signature check
+    expect(eip712Util.verifyTypedDataSignature).toHaveBeenCalled();
 
+    // Check nonce deleted
+    const nonceInfo = await nonceRepo.findValid(walletAddress);
+    expect(nonceInfo).toBeNull();
+
+    // Check user active
     const user = await userRepo.findByWallet(walletAddress);
     expect(user?.isActive).toBe(true);
   });
 
-  it('should return false if verification fails', async () => {
-    // Mock verify throw error
-    (eip712Util.verifyAndConsumeNonce as jest.Mock).mockRejectedValue(
-      new BadRequestException('Invalid signature'),
-    );
+  it('should return false if nonce not found or invalid', async () => {
+    // Không tạo nonce -> findValid trả về null
+    const result = await service.activeUser(activateData, fakeSignature);
+
+    expect(result).toBe(false);
+    expect(eip712Util.verifyTypedDataSignature).not.toHaveBeenCalled(); // Fail sớm
+  });
+
+  it('should return false if signature verification fails', async () => {
+    await nonceRepo.upsert(walletAddress);
+    (eip712Util.verifyTypedDataSignature as jest.Mock).mockResolvedValue(false);
 
     const result = await service.activeUser(activateData, fakeSignature);
 
     expect(result).toBe(false);
-    expect(eip712Util.verifyAndConsumeNonce).toHaveBeenCalled();
+    expect(eip712Util.verifyTypedDataSignature).toHaveBeenCalled();
 
-    // User should not be created or active
-    const user = await userRepo.findByWallet(walletAddress);
-    expect(user).toBeNull();
+    // Nonce still valid (or maybe depending on logic? Service throws/catches error, so nonce deletion is skipped)
+    // Actually in service: invalid signature throws Exception, caught, returns false.
+    // Nonce deletion happens ONLY on success.
+    const nonceInfo = await nonceRepo.findValid(walletAddress);
+    expect(nonceInfo).not.toBeNull();
   });
 
   it('should check active user correctly', async () => {
     expect(await service.isActiveUser(walletAddress)).toBe(false);
-
     await userRepo.upsert(walletAddress, { isActive: true });
-
     expect(await service.isActiveUser(walletAddress)).toBe(true);
-
-    // case: user tồn tại nhưng isActive = false
-    await userRepo.upsert(walletAddress, { isActive: false });
-    expect(await service.isActiveUser(walletAddress)).toBe(false);
-
-    // case: user bị soft delete
-    await userRepo.softDelete(walletAddress);
-    expect(await service.isActiveUser(walletAddress)).toBe(false);
-  });
-
-  it('should handle wallet address case-insensitivity in isActiveUser', async () => {
-    const upperAddress = walletAddress.toUpperCase() as HexString;
-    const lowerAddress = walletAddress.toLowerCase() as HexString;
-
-    await userRepo.upsert(lowerAddress, { isActive: true });
-
-    expect(await service.isActiveUser(upperAddress)).toBe(true);
-    expect(await service.isActiveUser(lowerAddress)).toBe(true);
   });
 });

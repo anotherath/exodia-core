@@ -15,7 +15,7 @@ import {
   type ClosePositionValue,
   type UpdatePositionValue,
 } from 'src/shared/types/eip712.type';
-import { verifyAndConsumeNonce } from 'src/shared/utils/eip712.util';
+import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 
 @Injectable()
 export class PositionService {
@@ -23,6 +23,46 @@ export class PositionService {
     private readonly repo: PositionRepository,
     private readonly nonceRepo: NonceRepository,
   ) {}
+
+  /* ================= PRIVATE HELPERS ================= */
+
+  /**
+   * Verify nonce: kiểm tra nonce trong typed data khớp với nonce trong DB,
+   * sau đó verify chữ ký EIP-712, cuối cùng xóa nonce đã dùng.
+   */
+  private async verifyAndConsumeNonce(params: {
+    walletAddress: HexString;
+    nonce: string;
+    signature: HexString;
+    types: Record<string, readonly { name: string; type: string }[]>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  }): Promise<void> {
+    const { walletAddress, nonce, signature, types, primaryType, message } =
+      params;
+
+    // 1. Kiểm tra nonce hợp lệ trong DB
+    const nonceInfo = await this.nonceRepo.findValid(walletAddress);
+    if (!nonceInfo || nonceInfo.nonce !== nonce) {
+      throw new BadRequestException('Nonce không hợp lệ hoặc đã hết hạn');
+    }
+
+    // 2. Verify chữ ký EIP-712
+    const isValid = await verifyTypedDataSignature({
+      types,
+      primaryType,
+      message,
+      signature,
+      walletAddress,
+    });
+
+    if (!isValid) {
+      throw new BadRequestException('Chữ ký không hợp lệ');
+    }
+
+    // 3. Xóa nonce sau khi dùng (one-time use)
+    await this.nonceRepo.delete(walletAddress);
+  }
 
   /* ================= OPEN ================= */
 
@@ -32,7 +72,7 @@ export class PositionService {
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -54,7 +94,7 @@ export class PositionService {
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -78,7 +118,7 @@ export class PositionService {
     typedData: UpdateOrderValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -100,7 +140,7 @@ export class PositionService {
     typedData: CancelOrderValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -154,7 +194,7 @@ export class PositionService {
     typedData: UpdatePositionValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -177,7 +217,7 @@ export class PositionService {
     typedData: ClosePositionValue,
     signature: HexString,
   ) {
-    await verifyAndConsumeNonce(this.nonceRepo, {
+    await this.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
