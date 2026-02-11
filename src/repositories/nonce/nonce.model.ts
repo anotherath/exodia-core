@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { NonceInfo } from 'src/shared/types/web3.type';
+import { NonceInfo } from 'src/shared/types/nonce.type';
 
 const NonceSchema = new Schema<NonceInfo>(
   {
