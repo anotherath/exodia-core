@@ -6,10 +6,14 @@ import { NonceModel } from 'src/repositories/nonce/nonce.model';
 import { UserModel } from 'src/repositories/user/user.model';
 import { ISignKeyInfo, HexString } from 'src/shared/types/web3.type';
 
-jest.mock('src/shared/utils/web3.util', () => ({
-  generateNonce: jest.fn(),
-  verifySignature: jest.fn(),
-}));
+jest.mock('src/shared/utils/web3.util', () => {
+  const original = jest.requireActual('src/shared/utils/web3.util');
+  return {
+    ...original,
+    generateNonce: jest.fn(),
+    verifySignature: jest.fn(),
+  };
+});
 
 import { generateNonce, verifySignature } from 'src/shared/utils/web3.util';
 
@@ -21,8 +25,20 @@ describe('UserService', () => {
   const walletAddress = '0x1111111111111111111111111111111111111111';
   const walletAddress1 = '0x1111111111111111111111111111111111111112';
   const walletAddress2 = '0x1111111111111111111111111111111111111113';
-  const fakeNonce = 'FAKE_NONCE_123';
+  const fakeNonce = '1234567890abcdef';
   const fakeSignature = '0xFAKE_SIGNATURE';
+  const fakeMessage = `
+exodia.io wants you to sign in with your Ethereum account:
+${walletAddress}
+
+I accept the Exodia Terms of Service.
+
+URI: https://exodia.io
+Version: 1
+Chain ID: 1
+Nonce: ${fakeNonce}
+Issued At: 2021-09-30T16:25:24Z
+`;
 
   beforeAll(async () => {
     await connectTestDB();
@@ -56,7 +72,7 @@ describe('UserService', () => {
 
     const signKeyInfo: ISignKeyInfo = {
       walletAddress,
-      message: fakeNonce, // MVP: message = nonce
+      message: fakeMessage,
       signature: fakeSignature,
     };
 
@@ -77,7 +93,7 @@ describe('UserService', () => {
 
     const result = await service.activeUser({
       walletAddress,
-      message: fakeNonce,
+      message: fakeMessage,
       signature: fakeSignature,
     });
 
@@ -90,9 +106,11 @@ describe('UserService', () => {
 
     (verifySignature as jest.Mock).mockResolvedValue(true);
 
+    const wrongMessage = fakeMessage.replace(fakeNonce, 'WRONG_NONCE');
+
     const result = await service.activeUser({
       walletAddress,
-      message: 'WRONG_NONCE',
+      message: wrongMessage,
       signature: fakeSignature,
     });
 
@@ -107,7 +125,7 @@ describe('UserService', () => {
 
     const result = await service.activeUser({
       walletAddress: walletAddress2,
-      message: fakeNonce,
+      message: fakeMessage,
       signature: fakeSignature,
     });
 
@@ -123,7 +141,7 @@ describe('UserService', () => {
 
     const signKeyInfo: ISignKeyInfo = {
       walletAddress,
-      message: fakeNonce,
+      message: fakeMessage,
       signature: fakeSignature,
     };
 
@@ -161,7 +179,7 @@ describe('UserService', () => {
 
     const result = await service.activeUser({
       walletAddress: upperAddress,
-      message: fakeNonce,
+      message: fakeMessage,
       signature: fakeSignature,
     });
 

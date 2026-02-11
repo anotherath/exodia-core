@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { UserRepository } from 'src/repositories/user/user.repository';
 import type { HexString, ISignKeyInfo } from 'src/shared/types/web3.type';
-import { verifySignature } from 'src/shared/utils/web3.util';
+import {
+  verifySignature,
+  extractNonceFromMessage,
+} from 'src/shared/utils/web3.util';
 
 @Injectable()
 export class UserService {
@@ -15,8 +18,14 @@ export class UserService {
   async activeUser(signKeyInfo: ISignKeyInfo): Promise<boolean> {
     // kiểm tra số nonce
     const nonce = await this.nonceRepo.findValid(signKeyInfo.walletAddress);
-    if (!nonce || nonce.nonce !== signKeyInfo.message) {
+    if (!nonce) {
       console.log('nonce khong hop le hoac het han');
+      return false;
+    }
+
+    const nonceFromMessage = extractNonceFromMessage(signKeyInfo.message);
+    if (nonce.nonce !== nonceFromMessage) {
+      console.log('nonce trong message khong khop');
       return false;
     }
 

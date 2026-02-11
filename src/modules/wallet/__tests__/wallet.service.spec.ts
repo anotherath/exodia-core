@@ -1,20 +1,26 @@
+import { Test, TestingModule } from '@nestjs/testing';
 import { WalletService } from '../wallet.service';
 import { WalletRepository } from 'src/repositories/wallet/wallet.repository';
 import { connectTestDB, closeTestDB } from 'test/mongo-memory';
 import { BadRequestException } from '@nestjs/common';
+import { WalletModel } from 'src/repositories/wallet/wallet.model';
 
 describe('WalletService', () => {
   let service: WalletService;
   let repo: WalletRepository;
 
-  const walletAddress = '0x1111111111111111111111111111111111111111';
-  const walletAddress1 = '0x1111111111111111111111111111111111111112';
-  const chainId = 1;
+  const WALLET_ADDRESS = '0x1234567890123456789012345678901234567890';
+  const CHAIN_ID = 1;
 
   beforeAll(async () => {
     await connectTestDB();
-    repo = new WalletRepository();
-    service = new WalletService(repo);
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [WalletService, WalletRepository],
+    }).compile();
+
+    service = module.get<WalletService>(WalletService);
+    repo = module.get<WalletRepository>(WalletRepository);
   });
 
   afterAll(async () => {
@@ -22,50 +28,93 @@ describe('WalletService', () => {
   });
 
   beforeEach(async () => {
-    if ((repo as any).model) {
-      await (repo as any).model.deleteMany({});
-    }
+    await WalletModel.deleteMany({});
   });
 
-  it('should create wallet if not exists', async () => {
-    const wallet = await service.getWallet(walletAddress, chainId);
+  describe('getWallet', () => {
+    it('should create and return a new wallet if it does not exist', async () => {
+      const wallet = await service.getWallet(WALLET_ADDRESS, CHAIN_ID);
 
-    expect(wallet.walletAddress).toBe(walletAddress.toLowerCase());
-    expect(wallet.chainId).toBe(chainId);
-    expect(Number(wallet.balance)).toBe(0);
-    expect(Number(wallet.lockedBalance)).toBe(0);
+      expect(wallet).toBeDefined();
+      expect(wallet.walletAddress).toBe(WALLET_ADDRESS.toLowerCase());
+      expect(wallet.chainId).toBe(CHAIN_ID);
+      expect(wallet.balance).toBe(0);
+      expect(wallet.lockedBalance).toBe(0);
+    });
+
+    it('should return existing wallet if it already exists', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '100');
+
+      const wallet = await service.getWallet(WALLET_ADDRESS, CHAIN_ID);
+
+      expect(wallet.balance).toBe(100);
+    });
+
+    it('should be case-insensitive for wallet address', async () => {
+      const upperAddress = WALLET_ADDRESS.toUpperCase();
+      const wallet = await service.getWallet(upperAddress, CHAIN_ID);
+
+      expect(wallet.walletAddress).toBe(WALLET_ADDRESS.toLowerCase());
+    });
   });
 
-  it('should lock balance correctly', async () => {
-    await service.getWallet(walletAddress, chainId);
-    await repo.deposit(walletAddress, chainId, '100');
+  describe('lockBalance', () => {
+    it('should lock balance successfully when sufficient funds exist', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '100');
 
-    await service.lockBalance(walletAddress, chainId, '40');
+      await service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '30');
 
-    const wallet = await repo.find(walletAddress, chainId);
+      const wallet = await repo.find(WALLET_ADDRESS, CHAIN_ID);
+      expect(wallet?.balance).toBe(70);
+      expect(wallet?.lockedBalance).toBe(30);
+    });
 
-    expect(Number(wallet?.balance)).toBe(60);
-    expect(Number(wallet?.lockedBalance)).toBe(40);
+    it('should throw BadRequestException if wallet does not exist', async () => {
+      await expect(
+        service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '10'),
+      ).rejects.toThrow(new BadRequestException('Insufficient balance'));
+    });
+
+    it('should throw BadRequestException if balance is insufficient', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '20');
+
+      await expect(
+        service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '30'),
+      ).rejects.toThrow(new BadRequestException('Insufficient balance'));
+    });
+
+    it('should handle string amounts correctly', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '100.5');
+
+      await service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '50.2');
+
+      const wallet = await repo.find(WALLET_ADDRESS, CHAIN_ID);
+      expect(wallet?.balance).toBe(50.3);
+      expect(wallet?.lockedBalance).toBe(50.2);
+    });
   });
 
-  it('should throw error when balance is insufficient', async () => {
-    await service.getWallet(walletAddress, chainId);
-    await repo.deposit(walletAddress, chainId, '10');
+  describe('unlockBalance', () => {
+    it('should unlock balance successfully', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '100');
+      await service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '40');
 
-    await expect(
-      service.lockBalance(walletAddress, chainId, '1000'),
-    ).rejects.toThrow(BadRequestException);
-  });
+      await service.unlockBalance(WALLET_ADDRESS, CHAIN_ID, '40');
 
-  it('should unlock balance correctly', async () => {
-    await repo.deposit(walletAddress1, chainId, '100');
-    await service.lockBalance(walletAddress1, chainId, '40');
+      const wallet = await repo.find(WALLET_ADDRESS, CHAIN_ID);
+      expect(wallet?.balance).toBe(100);
+      expect(wallet?.lockedBalance).toBe(0);
+    });
 
-    await service.unlockBalance(walletAddress1, chainId, '30');
+    it('should partial unlock balance successfully', async () => {
+      await repo.deposit(WALLET_ADDRESS, CHAIN_ID, '100');
+      await service.lockBalance(WALLET_ADDRESS, CHAIN_ID, '40');
 
-    const wallet = await repo.find(walletAddress1, chainId);
+      await service.unlockBalance(WALLET_ADDRESS, CHAIN_ID, '10');
 
-    expect(Number(wallet?.balance)).toBe(90);
-    expect(Number(wallet?.lockedBalance)).toBe(10);
+      const wallet = await repo.find(WALLET_ADDRESS, CHAIN_ID);
+      expect(wallet?.balance).toBe(70);
+      expect(wallet?.lockedBalance).toBe(30);
+    });
   });
 });

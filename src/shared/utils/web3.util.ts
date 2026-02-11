@@ -25,16 +25,7 @@ export function generateNonce(length = 16): string {
 
 export const isHexString = (v: string) => /^0x[a-fA-F0-9]+$/.test(v);
 
-// export function veryfiMessage(SignKeyInfo: ISignKeyInfo): boolean {
-//   const parsed = JSON.parse(SignKeyInfo.message);
-
-//   if (parsed.action !== 'ACTIVATE_TRADING_ACCOUNT') return false;
-
-//   if (parsed.walletAddress !== SignKeyInfo.walletAddress) return false;
-
-//   if (parsed.nonce !== 0) return false;
-
-//   if (parsed.issuedAt !== 1706500000000) return false;
-
-//   return true;
-// }
+export function extractNonceFromMessage(message: string): string | null {
+  const match = message.match(/Nonce:\s*([a-zA-Z0-9]+)/);
+  return match ? match[1] : null;
+}
