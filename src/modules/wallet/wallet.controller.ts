@@ -58,7 +58,6 @@ export class WalletController {
       body.walletAddress,
       body.chainId,
       body.lockedAmount,
-      body.finalAmount,
     );
 
     return { success: true };
