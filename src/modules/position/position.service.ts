@@ -1,15 +1,46 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PositionRepository } from 'src/repositories/position/position.repository';
+import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { Position } from 'src/shared/types/position.type';
+import type { HexString } from 'src/shared/types/web3.type';
+import {
+  OpenOrderTypes,
+  UpdateOrderTypes,
+  CancelOrderTypes,
+  ClosePositionTypes,
+  UpdatePositionTypes,
+  type OpenOrderValue,
+  type UpdateOrderValue,
+  type CancelOrderValue,
+  type ClosePositionValue,
+  type UpdatePositionValue,
+} from 'src/shared/types/eip712.type';
+import { verifyAndConsumeNonce } from 'src/shared/utils/eip712.util';
 
 @Injectable()
 export class PositionService {
-  constructor(private readonly repo: PositionRepository) {}
+  constructor(
+    private readonly repo: PositionRepository,
+    private readonly nonceRepo: NonceRepository,
+  ) {}
 
   /* ================= OPEN ================= */
 
   // mở lệnh market → open ngay
-  async openMarket(data: Position) {
+  async openMarket(
+    data: Position,
+    typedData: OpenOrderValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: OpenOrderTypes,
+      primaryType: 'OpenOrder',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     return this.repo.create({
       ...data,
       status: 'open',
@@ -18,7 +49,20 @@ export class PositionService {
   }
 
   // mở lệnh limit → pending
-  async openLimit(data: Position) {
+  async openLimit(
+    data: Position,
+    typedData: OpenOrderValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: OpenOrderTypes,
+      primaryType: 'OpenOrder',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     return this.repo.create({
       ...data,
       status: 'pending',
@@ -28,7 +72,21 @@ export class PositionService {
   /* ================= ORDERS ================= */
 
   // edit order limit (chỉ pending)
-  async updatePending(id: string, data: Partial<Position>) {
+  async updatePending(
+    id: string,
+    data: Partial<Position>,
+    typedData: UpdateOrderValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: UpdateOrderTypes,
+      primaryType: 'UpdateOrder',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'pending') {
       throw new BadRequestException('Order is not pending');
@@ -37,7 +95,20 @@ export class PositionService {
   }
 
   // huỷ order limit
-  async cancelOrder(id: string) {
+  async cancelOrder(
+    id: string,
+    typedData: CancelOrderValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: CancelOrderTypes,
+      primaryType: 'CancelOrder',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'pending') {
       throw new BadRequestException('Order cannot be cancelled');
@@ -45,13 +116,13 @@ export class PositionService {
     return this.repo.update(id, { status: 'closed' });
   }
 
-  // order đang mở (pending)
+  // order đang mở (pending) — READ, không cần verify
   async getOpenOrders(walletAddress: string) {
     const list = await this.repo.findActiveByWallet(walletAddress);
     return list.filter((p) => p.status === 'pending');
   }
 
-  // lịch sử order
+  // lịch sử order — READ, không cần verify
   async getOrderHistory(walletAddress: string) {
     const list = await this.repo.findByWallet(walletAddress);
     return list.filter((p) => p.status === 'closed');
@@ -59,23 +130,39 @@ export class PositionService {
 
   /* ================= POSITIONS ================= */
 
-  // position đang active (open)
+  // position đang active (open) — READ, không cần verify
   async getActivePositions(walletAddress: string) {
     const list = await this.repo.findActiveByWallet(walletAddress);
     return list.filter((p) => p.status === 'open');
   }
 
+  // history — READ, không cần verify
   async getHistory(walletAddress: string) {
     const list = await this.repo.findByWallet(walletAddress);
     return list.filter((p) => p.status === 'closed');
   }
 
+  // get by id — READ, không cần verify
   async getById(id: string) {
     return this.repo.findById(id);
   }
 
   // edit position đang mở
-  async updateOpen(id: string, data: Partial<Position>) {
+  async updateOpen(
+    id: string,
+    data: Partial<Position>,
+    typedData: UpdatePositionValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: UpdatePositionTypes,
+      primaryType: 'UpdatePosition',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'open') {
       throw new BadRequestException('Position is not open');
@@ -84,7 +171,21 @@ export class PositionService {
   }
 
   // đóng position toàn phần
-  async close(id: string, pnl: number) {
+  async close(
+    id: string,
+    pnl: number,
+    typedData: ClosePositionValue,
+    signature: HexString,
+  ) {
+    await verifyAndConsumeNonce(this.nonceRepo, {
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: ClosePositionTypes,
+      primaryType: 'ClosePosition',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'open') {
       throw new BadRequestException('Position is not open');

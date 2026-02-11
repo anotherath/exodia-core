@@ -19,25 +19,29 @@ export class PositionController {
   // mở lệnh market
   @Post('orders/market')
   openMarket(@Body() body: any) {
-    return this.positionService.openMarket(body);
+    const { signature, typedData, ...data } = body;
+    return this.positionService.openMarket(data, typedData, signature);
   }
 
   // mở lệnh limit
   @Post('orders/limit')
   openLimit(@Body() body: any) {
-    return this.positionService.openLimit(body);
+    const { signature, typedData, ...data } = body;
+    return this.positionService.openLimit(data, typedData, signature);
   }
 
   // edit order limit (chưa khớp)
   @Put('orders/:id')
   updateOrder(@Param('id') id: string, @Body() body: any) {
-    return this.positionService.updatePending(id, body);
+    const { signature, typedData, ...data } = body;
+    return this.positionService.updatePending(id, data, typedData, signature);
   }
 
   // hủy order limit
   @Delete('orders/:id')
-  cancelOrder(@Param('id') id: string) {
-    return this.positionService.cancelOrder(id);
+  cancelOrder(@Param('id') id: string, @Body() body: any) {
+    const { signature, typedData } = body;
+    return this.positionService.cancelOrder(id, typedData, signature);
   }
 
   // order đang mở (pending)
@@ -69,13 +73,15 @@ export class PositionController {
   // edit position đang mở (leverage, SL/TP sau này)
   @Put('positions/:id')
   updatePosition(@Param('id') id: string, @Body() body: any) {
-    return this.positionService.updateOpen(id, body);
+    const { signature, typedData, ...data } = body;
+    return this.positionService.updateOpen(id, data, typedData, signature);
   }
 
   // đóng position toàn phần
   @Post('positions/:id/close')
   closePosition(@Param('id') id: string, @Body() body: any) {
-    return this.positionService.close(id, body);
+    const { signature, typedData, pnl } = body;
+    return this.positionService.close(id, pnl, typedData, signature);
   }
 
   // history position
