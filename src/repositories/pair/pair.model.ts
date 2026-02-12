@@ -15,6 +15,12 @@ const PairSchema = new Schema<Pair>(
       min: 1,
       default: 100,
     },
+    minVolume: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 10,
+    },
     isActive: {
       type: Boolean,
       default: true,
