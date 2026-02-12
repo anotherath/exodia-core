@@ -73,6 +73,22 @@ const PositionSchema = new Schema<Position>(
       default: 0,
     },
 
+    // giá khi đóng lệnh
+    exitPrice: {
+      type: Number,
+      default: null,
+    },
+
+    // stop loss / take profit
+    sl: {
+      type: Number,
+      default: null,
+    },
+    tp: {
+      type: Number,
+      default: null,
+    },
+
     // soft delete (nếu cần)
     deletedAt: {
       type: Date,

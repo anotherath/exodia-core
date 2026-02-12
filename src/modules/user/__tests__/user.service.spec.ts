@@ -48,6 +48,7 @@ describe('UserService', () => {
     await NonceModel.deleteMany({});
     await UserModel.deleteMany({});
     jest.clearAllMocks();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
 
     // Default success verify
     (eip712Util.verifyTypedDataSignature as jest.Mock).mockResolvedValue(true);
@@ -79,6 +80,22 @@ describe('UserService', () => {
 
     expect(result).toBe(false);
     expect(eip712Util.verifyTypedDataSignature).not.toHaveBeenCalled(); // Fail sớm
+  });
+
+  it('should return false if nonce does not match', async () => {
+    // Tạo nonce khác trong DB
+    await nonceRepo.upsert(walletAddress);
+
+    const result = await service.activeUser(
+      {
+        ...activateData,
+        nonce: 'wrong_nonce',
+      },
+      fakeSignature,
+    );
+
+    expect(result).toBe(false);
+    expect(eip712Util.verifyTypedDataSignature).not.toHaveBeenCalled();
   });
 
   it('should return false if signature verification fails', async () => {

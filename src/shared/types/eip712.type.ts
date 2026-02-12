@@ -15,6 +15,8 @@ export const OpenOrderTypes = {
     { name: 'qty', type: 'uint256' },
     { name: 'price', type: 'uint256' },
     { name: 'leverage', type: 'uint256' },
+    { name: 'sl', type: 'uint256' },
+    { name: 'tp', type: 'uint256' },
     { name: 'nonce', type: 'string' },
   ],
 } as const;
@@ -27,6 +29,8 @@ export const UpdateOrderTypes = {
     { name: 'qty', type: 'uint256' },
     { name: 'price', type: 'uint256' },
     { name: 'leverage', type: 'uint256' },
+    { name: 'sl', type: 'uint256' },
+    { name: 'tp', type: 'uint256' },
     { name: 'nonce', type: 'string' },
   ],
 } as const;
@@ -55,6 +59,9 @@ export const UpdatePositionTypes = {
     { name: 'walletAddress', type: 'address' },
     { name: 'positionId', type: 'string' },
     { name: 'leverage', type: 'uint256' },
+    { name: 'qty', type: 'uint256' },
+    { name: 'sl', type: 'uint256' },
+    { name: 'tp', type: 'uint256' },
     { name: 'nonce', type: 'string' },
   ],
 } as const;
@@ -68,6 +75,8 @@ export interface OpenOrderValue {
   qty: bigint;
   price: bigint;
   leverage: bigint;
+  sl: bigint;
+  tp: bigint;
   nonce: string;
 }
 
@@ -77,6 +86,8 @@ export interface UpdateOrderValue {
   qty: bigint;
   price: bigint;
   leverage: bigint;
+  sl: bigint;
+  tp: bigint;
   nonce: string;
 }
 
@@ -96,6 +107,9 @@ export interface UpdatePositionValue {
   walletAddress: string;
   positionId: string;
   leverage: bigint;
+  qty: bigint;
+  sl: bigint;
+  tp: bigint;
   nonce: string;
 }
 

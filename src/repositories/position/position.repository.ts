@@ -51,13 +51,18 @@ export class PositionRepository {
   }
 
   // đóng position
-  async close(id: string, pnl: number): Promise<Position | null> {
+  async close(
+    id: string,
+    pnl: number,
+    exitPrice: number,
+  ): Promise<Position | null> {
     return PositionModel.findOneAndUpdate(
       { _id: id, ...this.baseQuery() },
       {
         $set: {
           status: 'closed',
           pnl,
+          exitPrice,
         },
       },
       { new: true },

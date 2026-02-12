@@ -35,6 +35,13 @@ export interface Position {
   // pnl hiện tại / cuối cùng
   pnl: number;
 
+  // giá khi đóng lệnh
+  exitPrice?: number | null;
+
+  // giá chốt lời / cắt lỗ
+  tp?: number | null;
+  sl?: number | null;
+
   // soft delete
   deletedAt?: Date | null;
 

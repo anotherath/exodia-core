@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { Position } from 'src/shared/types/position.type';
@@ -16,63 +16,26 @@ import {
   type UpdatePositionValue,
 } from 'src/shared/types/eip712.type';
 import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
+import { MarketPriceCache } from '../market/market-price.cache';
+import { PositionValidationService } from './position-validation.service';
 
 @Injectable()
 export class PositionService {
+  private readonly logger = new Logger(PositionService.name);
+
   constructor(
     private readonly repo: PositionRepository,
-    private readonly nonceRepo: NonceRepository,
+    private readonly priceCache: MarketPriceCache,
+    private readonly validator: PositionValidationService,
   ) {}
 
-  /* ================= PRIVATE HELPERS ================= */
-
-  /**
-   * Verify nonce: kiểm tra nonce trong typed data khớp với nonce trong DB,
-   * sau đó verify chữ ký EIP-712, cuối cùng xóa nonce đã dùng.
-   */
-  private async verifyAndConsumeNonce(params: {
-    walletAddress: HexString;
-    nonce: string;
-    signature: HexString;
-    types: Record<string, readonly { name: string; type: string }[]>;
-    primaryType: string;
-    message: Record<string, unknown>;
-  }): Promise<void> {
-    const { walletAddress, nonce, signature, types, primaryType, message } =
-      params;
-
-    // 1. Kiểm tra nonce hợp lệ trong DB
-    const nonceInfo = await this.nonceRepo.findValid(walletAddress);
-    if (!nonceInfo || nonceInfo.nonce !== nonce) {
-      throw new BadRequestException('Nonce không hợp lệ hoặc đã hết hạn');
-    }
-
-    // 2. Verify chữ ký EIP-712
-    const isValid = await verifyTypedDataSignature({
-      types,
-      primaryType,
-      message,
-      signature,
-      walletAddress,
-    });
-
-    if (!isValid) {
-      throw new BadRequestException('Chữ ký không hợp lệ');
-    }
-
-    // 3. Xóa nonce sau khi dùng (one-time use)
-    await this.nonceRepo.delete(walletAddress);
-  }
-
-  /* ================= OPEN ================= */
-
-  // mở lệnh market → open ngay
+  // Mở lệnh Market (khớp ngay)
   async openMarket(
     data: Position,
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
-    await this.verifyAndConsumeNonce({
+    await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -81,20 +44,35 @@ export class PositionService {
       message: typedData as unknown as Record<string, unknown>,
     });
 
+    const ticker = this.priceCache.get(data.symbol);
+    if (!ticker) {
+      throw new BadRequestException(
+        'Hiện chưa có giá thị trường cho cặp tiền này',
+      );
+    }
+
+    const entryPrice =
+      data.side === 'long'
+        ? parseFloat(ticker.askPx)
+        : parseFloat(ticker.bidPx);
+
+    this.validator.validateSLTP(data.side, entryPrice, data.sl, data.tp);
+
     return this.repo.create({
       ...data,
       status: 'open',
-      entryPrice: data.entryPrice,
+      entryPrice: entryPrice,
+      price: null,
     });
   }
 
-  // mở lệnh limit → pending
+  // Mở lệnh Limit (chờ khớp)
   async openLimit(
     data: Position,
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
-    await this.verifyAndConsumeNonce({
+    await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -103,22 +81,23 @@ export class PositionService {
       message: typedData as unknown as Record<string, unknown>,
     });
 
+    this.validator.validateLimitPrice(data);
+
     return this.repo.create({
       ...data,
       status: 'pending',
+      entryPrice: null,
     });
   }
 
-  /* ================= ORDERS ================= */
-
-  // edit order limit (chỉ pending)
+  // Sửa lệnh đang chờ
   async updatePending(
     id: string,
     data: Partial<Position>,
     typedData: UpdateOrderValue,
     signature: HexString,
   ) {
-    await this.verifyAndConsumeNonce({
+    await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -129,72 +108,31 @@ export class PositionService {
 
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'pending') {
-      throw new BadRequestException('Order is not pending');
+      throw new BadRequestException(
+        'Lệnh không tồn tại hoặc không còn ở trạng thái chờ (pending)',
+      );
     }
-    return this.repo.update(id, data);
-  }
 
-  // huỷ order limit
-  async cancelOrder(
-    id: string,
-    typedData: CancelOrderValue,
-    signature: HexString,
-  ) {
-    await this.verifyAndConsumeNonce({
-      walletAddress: typedData.walletAddress as HexString,
-      nonce: typedData.nonce,
-      signature,
-      types: CancelOrderTypes,
-      primaryType: 'CancelOrder',
-      message: typedData as unknown as Record<string, unknown>,
+    const updatedData: Position = { ...pos, ...data };
+    this.validator.validateLimitPrice(updatedData);
+
+    return this.repo.update(id, {
+      qty: data.qty,
+      price: data.price,
+      sl: data.sl,
+      tp: data.tp,
+      leverage: data.leverage,
     });
-
-    const pos = await this.repo.findById(id);
-    if (!pos || pos.status !== 'pending') {
-      throw new BadRequestException('Order cannot be cancelled');
-    }
-    return this.repo.update(id, { status: 'closed' });
   }
 
-  // order đang mở (pending) — READ, không cần verify
-  async getOpenOrders(walletAddress: string) {
-    const list = await this.repo.findActiveByWallet(walletAddress);
-    return list.filter((p) => p.status === 'pending');
-  }
-
-  // lịch sử order — READ, không cần verify
-  async getOrderHistory(walletAddress: string) {
-    const list = await this.repo.findByWallet(walletAddress);
-    return list.filter((p) => p.status === 'closed');
-  }
-
-  /* ================= POSITIONS ================= */
-
-  // position đang active (open) — READ, không cần verify
-  async getActivePositions(walletAddress: string) {
-    const list = await this.repo.findActiveByWallet(walletAddress);
-    return list.filter((p) => p.status === 'open');
-  }
-
-  // history — READ, không cần verify
-  async getHistory(walletAddress: string) {
-    const list = await this.repo.findByWallet(walletAddress);
-    return list.filter((p) => p.status === 'closed');
-  }
-
-  // get by id — READ, không cần verify
-  async getById(id: string) {
-    return this.repo.findById(id);
-  }
-
-  // edit position đang mở
+  // Sửa vị thế đang mở
   async updateOpen(
     id: string,
     data: Partial<Position>,
     typedData: UpdatePositionValue,
     signature: HexString,
   ) {
-    await this.verifyAndConsumeNonce({
+    await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -205,19 +143,61 @@ export class PositionService {
 
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'open') {
-      throw new BadRequestException('Position is not open');
+      throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
-    return this.repo.update(id, data);
+
+    if (data.qty && data.qty < pos.qty) {
+      const ticker = this.priceCache.get(pos.symbol);
+      if (!ticker)
+        throw new BadRequestException('Không có giá thị trường để đóng lệnh');
+    } else if (data.qty && data.qty > pos.qty) {
+      throw new BadRequestException(
+        'Không thể tăng khối lượng vị thế trực tiếp',
+      );
+    }
+
+    if (data.sl || data.tp) {
+      this.validator.validateSLTP(pos.side, pos.entryPrice!, data.sl, data.tp);
+    }
+
+    return this.repo.update(id, {
+      qty: data.qty,
+      sl: data.sl,
+      tp: data.tp,
+      leverage: data.leverage,
+    });
   }
 
-  // đóng position toàn phần
+  // Huỷ lệnh chờ
+  async cancelOrder(
+    id: string,
+    typedData: CancelOrderValue,
+    signature: HexString,
+  ) {
+    await this.validator.verifyAndConsumeNonce({
+      walletAddress: typedData.walletAddress as HexString,
+      nonce: typedData.nonce,
+      signature,
+      types: CancelOrderTypes,
+      primaryType: 'CancelOrder',
+      message: typedData as unknown as Record<string, unknown>,
+    });
+
+    const pos = await this.repo.findById(id);
+    if (!pos || pos.status !== 'pending') {
+      throw new BadRequestException('Lệnh không thể hủy');
+    }
+    return this.repo.update(id, { status: 'closed' });
+  }
+
+  // Đóng toàn bộ vị thế
   async close(
     id: string,
-    pnl: number,
+    _pnl: number,
     typedData: ClosePositionValue,
     signature: HexString,
   ) {
-    await this.verifyAndConsumeNonce({
+    await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -228,8 +208,52 @@ export class PositionService {
 
     const pos = await this.repo.findById(id);
     if (!pos || pos.status !== 'open') {
-      throw new BadRequestException('Position is not open');
+      throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
-    return this.repo.close(id, pnl);
+
+    const ticker = this.priceCache.get(pos.symbol);
+    if (!ticker)
+      throw new BadRequestException('Không có giá thị trường để đóng lệnh');
+
+    const exitPrice =
+      pos.side === 'long' ? parseFloat(ticker.bidPx) : parseFloat(ticker.askPx);
+    const pnl =
+      pos.side === 'long'
+        ? (exitPrice - pos.entryPrice!) * pos.qty
+        : (pos.entryPrice! - exitPrice) * pos.qty;
+
+    this.logger.log(
+      `Closing Position ${id}: Exit Price ${exitPrice}, PnL ${pnl}`,
+    );
+    return this.repo.close(id, pnl, exitPrice);
+  }
+
+  // Lấy danh sách lệnh chờ
+  async getOpenOrders(walletAddress: string) {
+    const list = await this.repo.findActiveByWallet(walletAddress);
+    return list.filter((p) => p.status === 'pending');
+  }
+
+  // Lấy lịch sử lệnh chờ
+  async getOrderHistory(walletAddress: string) {
+    const list = await this.repo.findByWallet(walletAddress);
+    return list.filter((p) => p.status === 'closed');
+  }
+
+  // Lấy danh sách vị thế đang mở
+  async getActivePositions(walletAddress: string) {
+    const list = await this.repo.findActiveByWallet(walletAddress);
+    return list.filter((p) => p.status === 'open');
+  }
+
+  // Lấy lịch sử vị thế
+  async getHistory(walletAddress: string) {
+    const list = await this.repo.findByWallet(walletAddress);
+    return list.filter((p) => p.status === 'closed');
+  }
+
+  // Lấy thông tin vị thế theo ID
+  async getById(id: string) {
+    return this.repo.findById(id);
   }
 }
