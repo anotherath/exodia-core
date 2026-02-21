@@ -6,9 +6,10 @@ import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
 import { PositionValidationService } from './position-validation.service';
 
 import { MarketModule } from '../market/market.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [MarketModule],
+  imports: [MarketModule, WalletModule],
   controllers: [PositionController],
   providers: [
     PositionService,

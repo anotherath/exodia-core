@@ -17,6 +17,9 @@ import {
 } from 'src/shared/types/eip712.type';
 import { MarketPriceCache } from '../market/market-price.cache';
 import { PositionValidationService } from './position-validation.service';
+import { calculatePnL } from 'src/shared/utils/math.util';
+import { WalletService } from '../wallet/wallet.service';
+import { EIP712_DOMAIN } from 'src/shared/types/eip712.type';
 
 @Injectable()
 export class PositionService {
@@ -26,6 +29,7 @@ export class PositionService {
     private readonly repo: PositionRepository,
     private readonly priceCache: MarketPriceCache,
     private readonly validator: PositionValidationService,
+    private readonly walletService: WalletService,
   ) {}
 
   // Mở lệnh Market (khớp ngay)
@@ -216,14 +220,19 @@ export class PositionService {
 
     const exitPrice =
       pos.side === 'long' ? parseFloat(ticker.bidPx) : parseFloat(ticker.askPx);
-    const pnl =
-      pos.side === 'long'
-        ? (exitPrice - pos.entryPrice!) * pos.qty
-        : (pos.entryPrice! - exitPrice) * pos.qty;
+    const pnl = calculatePnL(pos.side, pos.qty, pos.entryPrice!, exitPrice);
 
     this.logger.log(
       `Closing Position ${id}: Exit Price ${exitPrice}, PnL ${pnl}`,
     );
+
+    // Cập nhật PnL vào tradeBalance của ví
+    await this.walletService.updateTradePnL(
+      pos.walletAddress,
+      EIP712_DOMAIN.chainId,
+      pnl,
+    );
+
     return this.repo.close(id, pnl, exitPrice);
   }
 

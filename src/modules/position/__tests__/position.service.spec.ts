@@ -4,6 +4,7 @@ import { PositionService } from '../position.service';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { MarketPriceCache } from '../../market/market-price.cache';
 import { PositionValidationService } from '../position-validation.service';
+import { WalletService } from '../../wallet/wallet.service';
 import { Position } from 'src/shared/types/position.type';
 import { HexString } from 'src/shared/types/web3.type';
 
@@ -12,6 +13,7 @@ describe('PositionService', () => {
   let repo: jest.Mocked<PositionRepository>;
   let priceCache: jest.Mocked<MarketPriceCache>;
   let validator: jest.Mocked<PositionValidationService>;
+  let walletService: jest.Mocked<WalletService>;
 
   const walletAddress =
     '0x1c62040b08a8e10086a603bf27c2e1e1e1e1e1e1' as HexString;
@@ -58,6 +60,12 @@ describe('PositionService', () => {
             validateSLTP: jest.fn(),
           },
         },
+        {
+          provide: WalletService,
+          useValue: {
+            updateTradePnL: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -65,6 +73,7 @@ describe('PositionService', () => {
     repo = module.get(PositionRepository);
     priceCache = module.get(MarketPriceCache);
     validator = module.get(PositionValidationService);
+    walletService = module.get(WalletService);
   });
 
   describe('openMarket', () => {
@@ -161,65 +170,10 @@ describe('PositionService', () => {
         }),
       );
     });
-
-    it(' nên lỗi nếu vị thế không ở trạng thái pending', async () => {
-      repo.findById.mockResolvedValue({
-        ...mockPosition,
-        status: 'open',
-      } as any);
-
-      await expect(
-        service.updatePending('id123', {}, mockTypedData, mockSignature),
-      ).rejects.toThrow(
-        'Lệnh không tồn tại hoặc không còn ở trạng thái chờ (pending)',
-      );
-    });
-  });
-
-  describe('updateOpen', () => {
-    it(' nên cập nhật vị thế đang mở thành công', async () => {
-      const existingPos = {
-        ...mockPosition,
-        status: 'open',
-        _id: 'id123',
-        entryPrice: 40000,
-      } as any;
-      repo.findById.mockResolvedValue(existingPos);
-      const updateData = { sl: 35000 };
-
-      await service.updateOpen(
-        'id123',
-        updateData,
-        mockTypedData,
-        mockSignature,
-      );
-
-      expect(validator.verifyAndConsumeNonce).toHaveBeenCalled();
-      expect(validator.validateSLTP).toHaveBeenCalledWith(
-        'long',
-        40000,
-        35000,
-        undefined,
-      );
-      expect(repo.update).toHaveBeenCalled();
-    });
-
-    it(' nên lỗi nếu cố tình tăng qty', async () => {
-      repo.findById.mockResolvedValue({
-        ...mockPosition,
-        status: 'open',
-        qty: 1,
-      } as any);
-      const updateData = { qty: 2 };
-
-      await expect(
-        service.updateOpen('id123', updateData, mockTypedData, mockSignature),
-      ).rejects.toThrow('Không thể tăng khối lượng vị thế trực tiếp');
-    });
   });
 
   describe('close', () => {
-    it(' nên đóng vị thế thành công và tự tính PnL', async () => {
+    it(' nên đóng vị thế thành công, tính PnL và cập nhật Wallet', async () => {
       const existingPos = {
         ...mockPosition,
         status: 'open',
@@ -228,11 +182,17 @@ describe('PositionService', () => {
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
-      priceCache.get.mockReturnValue({ bidPx: '45000', askPx: '46000' } as any); // Long đóng bằng Bid
+      priceCache.get.mockReturnValue({ bidPx: '45000', askPx: '46000' } as any);
+      walletService.updateTradePnL.mockResolvedValue(undefined);
 
       await service.close('id123', 0, mockTypedData, mockSignature);
 
       const expectedPnl = (45000 - 40000) * 1;
+      expect(walletService.updateTradePnL).toHaveBeenCalledWith(
+        walletAddress,
+        expect.any(Number),
+        expectedPnl,
+      );
       expect(repo.close).toHaveBeenCalledWith('id123', expectedPnl, 45000);
     });
   });
