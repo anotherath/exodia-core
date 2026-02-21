@@ -19,8 +19,8 @@ describe('WalletController', () => {
           provide: WalletService,
           useValue: {
             getWallet: jest.fn(),
-            lockBalance: jest.fn(),
-            unlockBalance: jest.fn(),
+            depositToTrade: jest.fn(),
+            withdrawFromTrade: jest.fn(),
           },
         },
       ],
@@ -35,8 +35,8 @@ describe('WalletController', () => {
       const mockResult = {
         walletAddress,
         chainId,
-        balance: '100',
-        locked: '0',
+        balance: 100,
+        tradeBalance: 0,
       };
       service.getWallet.mockResolvedValue(mockResult as any);
 
@@ -51,38 +51,37 @@ describe('WalletController', () => {
     });
   });
 
-  describe('lockBalance', () => {
-    it('should lock balance and return success', async () => {
-      const body = { walletAddress, chainId, amount: '50' };
-      service.lockBalance.mockResolvedValue(undefined);
+  describe('depositToTrade', () => {
+    it('should deposit to trade and return success', async () => {
+      const body = { walletAddress, chainId, amount: 50 };
+      service.depositToTrade.mockResolvedValue(undefined);
 
-      const result = await controller.lockBalance(body);
+      const result = await controller.depositToTrade(body);
 
-      expect(service.lockBalance).toHaveBeenCalledWith(
+      expect(service.depositToTrade).toHaveBeenCalledWith(
         walletAddress,
         chainId,
-        '50',
+        50,
       );
       expect(result).toEqual({ success: true });
     });
   });
 
-  describe('unlockBalance', () => {
-    it('should unlock balance and return success', async () => {
+  describe('withdrawFromTrade', () => {
+    it('should withdraw from trade and return success', async () => {
       const body = {
         walletAddress,
         chainId,
-        lockedAmount: '50',
-        finalAmount: '0',
+        amount: 50,
       };
-      service.unlockBalance.mockResolvedValue(undefined);
+      service.withdrawFromTrade.mockResolvedValue(undefined);
 
-      const result = await controller.unlockBalance(body);
+      const result = await controller.withdrawFromTrade(body);
 
-      expect(service.unlockBalance).toHaveBeenCalledWith(
+      expect(service.withdrawFromTrade).toHaveBeenCalledWith(
         walletAddress,
         chainId,
-        '50',
+        50,
       );
       expect(result).toEqual({ success: true });
     });

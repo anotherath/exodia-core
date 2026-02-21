@@ -24,17 +24,17 @@ export class WalletController {
     };
   }
 
-  // POST /wallet/lock
-  @Post('lock')
-  async lockBalance(
+  // POST /wallet/deposit-trade
+  @Post('deposit-trade')
+  async depositToTrade(
     @Body()
     body: {
       walletAddress: HexString;
       chainId: number;
-      amount: string;
+      amount: number;
     },
   ) {
-    await this.walletService.lockBalance(
+    await this.walletService.depositToTrade(
       body.walletAddress,
       body.chainId,
       body.amount,
@@ -43,21 +43,20 @@ export class WalletController {
     return { success: true };
   }
 
-  // POST /wallet/unlock
-  @Post('unlock')
-  async unlockBalance(
+  // POST /wallet/withdraw-trade
+  @Post('withdraw-trade')
+  async withdrawFromTrade(
     @Body()
     body: {
       walletAddress: HexString;
       chainId: number;
-      lockedAmount: string;
-      finalAmount: string;
+      amount: number;
     },
   ) {
-    await this.walletService.unlockBalance(
+    await this.walletService.withdrawFromTrade(
       body.walletAddress,
       body.chainId,
-      body.lockedAmount,
+      body.amount,
     );
 
     return { success: true };

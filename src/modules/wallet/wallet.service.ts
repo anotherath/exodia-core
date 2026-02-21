@@ -9,20 +9,30 @@ export class WalletService {
     return this.repo.upsert(walletAddress, chainId);
   }
 
-  async lockBalance(walletAddress: string, chainId: number, amount: string) {
+  // Chuyển tiền vào quỹ giao dịch
+  async depositToTrade(walletAddress: string, chainId: number, amount: number) {
     const wallet = await this.repo.find(walletAddress, chainId);
-    if (!wallet || Number(wallet.balance) < Number(amount)) {
+    if (!wallet || wallet.balance < amount) {
       throw new BadRequestException('Insufficient balance');
     }
-
-    await this.repo.lockBalance(walletAddress, chainId, amount);
+    await this.repo.depositToTrade(walletAddress, chainId, amount);
   }
 
-  async unlockBalance(
+  // Rút tiền từ quỹ giao dịch về số dư khả dụng
+  async withdrawFromTrade(
     walletAddress: string,
     chainId: number,
-    lockedAmount: string,
+    amount: number,
   ) {
-    await this.repo.unlockBalance(walletAddress, chainId, lockedAmount);
+    const wallet = await this.repo.find(walletAddress, chainId);
+    if (!wallet || wallet.tradeBalance < amount) {
+      throw new BadRequestException('Insufficient trade balance');
+    }
+    await this.repo.withdrawFromTrade(walletAddress, chainId, amount);
+  }
+
+  // Cập nhật PnL khi đóng lệnh
+  async updateTradePnL(walletAddress: string, chainId: number, pnl: number) {
+    await this.repo.updateTradePnL(walletAddress, chainId, pnl);
   }
 }

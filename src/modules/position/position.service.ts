@@ -15,7 +15,6 @@ import {
   type ClosePositionValue,
   type UpdatePositionValue,
 } from 'src/shared/types/eip712.type';
-import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 import { MarketPriceCache } from '../market/market-price.cache';
 import { PositionValidationService } from './position-validation.service';
 

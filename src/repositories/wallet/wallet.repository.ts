@@ -1,19 +1,19 @@
 // src/repositories/wallet.repository.ts
+import { Injectable } from '@nestjs/common';
 import { WalletModel } from './wallet.model';
 import { Wallet } from 'src/shared/types/wallet.type';
 
+@Injectable()
 export class WalletRepository {
   // Lấy wallet theo (wallet + chain)
-  // Trả về null nếu chưa tồn tại
   async find(walletAddress: string, chainId: number): Promise<Wallet | null> {
     return WalletModel.findOne({
       walletAddress: walletAddress.toLowerCase(),
       chainId,
-    }).lean(); // dùng lean để trả plain object (nhẹ, nhanh)
+    }).lean();
   }
 
   // Tạo wallet nếu chưa có
-  // Nếu đã tồn tại thì chỉ trả về document hiện tại (không thay đổi số dư)
   async upsert(walletAddress: string, chainId: number): Promise<Wallet> {
     return WalletModel.findOneAndUpdate(
       {
@@ -21,22 +21,19 @@ export class WalletRepository {
         chainId,
       },
       {
-        // Chỉ set khi INSERT lần đầu
         $setOnInsert: {
-          balance: '0',
-          lockedBalance: '0',
-          totalDeposited: '0',
-          totalWithdrawn: '0',
+          balance: 0,
+          tradeBalance: 0,
+          totalDeposited: 0,
+          totalWithdrawn: 0,
         },
       },
-      { upsert: true, new: true }, // new=true trả doc sau update/insert
+      { upsert: true, new: true },
     ).lean();
   }
 
-  // Nạp tiền:
-  // - Nếu wallet CHƯA tồn tại → tạo mới
-  // - Nếu ĐÃ tồn tại → cộng tiền vào balance
-  async deposit(walletAddress: string, chainId: number, amount: string) {
+  // Nạp tiền vào balance
+  async deposit(walletAddress: string, chainId: number, amount: number) {
     await WalletModel.updateOne(
       {
         walletAddress: walletAddress.toLowerCase(),
@@ -44,60 +41,68 @@ export class WalletRepository {
       },
       {
         $inc: {
-          balance: Number(amount), // tiền khả dụng
-          totalDeposited: Number(amount), // tổng tiền đã nạp
+          balance: amount,
+          totalDeposited: amount,
         },
         $setOnInsert: {
-          lockedBalance: '0',
-          totalWithdrawn: '0',
+          tradeBalance: 0,
+          totalWithdrawn: 0,
         },
       },
       { upsert: true },
     );
   }
 
-  // Khi mở position:
-  // chuyển tiền từ balance -> lockedBalance
-  async lockBalance(walletAddress: string, chainId: number, amount: string) {
+  // Chuyển tiền từ quỹ khả dụng (balance) sang quỹ giao dịch (tradeBalance)
+  async depositToTrade(walletAddress: string, chainId: number, amount: number) {
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: -Number(amount), // trừ tiền khả dụng
-          lockedBalance: Number(amount), // khoá tiền vào lệnh
+          balance: -amount,
+          tradeBalance: amount,
         },
       },
     );
   }
 
-  // Khi đóng position:
-  // - Giải phóng lockedAmount khỏi lockedBalance
-  // - Cộng lockedAmount vào balance
-  async unlockBalance(
+  // Rút tiền từ quỹ giao dịch (tradeBalance) về quỹ khả dụng (balance)
+  async withdrawFromTrade(
     walletAddress: string,
     chainId: number,
-    lockedAmount: string,
+    amount: number,
   ) {
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: Number(lockedAmount), // số tiền thực nhận
-          lockedBalance: -Number(lockedAmount), // giải phóng tiền khoá
+          balance: amount,
+          tradeBalance: -amount,
         },
       },
     );
   }
 
-  // Khi user rút tiền
-  // Trừ balance và cộng tổng tiền đã rút
-  async withdraw(walletAddress: string, chainId: number, amount: string) {
+  // Cập nhật lợi nhuận/thua lỗ trực tiếp vào tradeBalance
+  async updateTradePnL(walletAddress: string, chainId: number, pnl: number) {
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: -Number(amount), // trừ tiền khả dụng
-          totalWithdrawn: Number(amount), // tổng tiền đã rút
+          tradeBalance: pnl,
+        },
+      },
+    );
+  }
+
+  // Rút tiền khỏi hệ thống
+  async withdraw(walletAddress: string, chainId: number, amount: number) {
+    await WalletModel.updateOne(
+      { walletAddress: walletAddress.toLowerCase(), chainId },
+      {
+        $inc: {
+          balance: -amount,
+          totalWithdrawn: amount,
         },
       },
     );

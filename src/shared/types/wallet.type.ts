@@ -3,7 +3,7 @@ export interface Wallet {
   chainId: number;
 
   balance: number; // USDT khả dụng
-  lockedBalance: number; // USDT đang vào vị thế
+  tradeBalance: number; // USDT dùng để giao dịch (số dư giao dịch)
 
   totalDeposited: number;
   totalWithdrawn: number;

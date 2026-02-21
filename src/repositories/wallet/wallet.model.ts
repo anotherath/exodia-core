@@ -1,4 +1,4 @@
-import mongoose, { Schema } from 'mongoose';
+import { Schema, model } from 'mongoose';
 import { Wallet } from 'src/shared/types/wallet.type';
 
 const WalletSchema = new Schema<Wallet>(
@@ -18,7 +18,7 @@ const WalletSchema = new Schema<Wallet>(
       type: Number,
       default: 0,
     },
-    lockedBalance: {
+    tradeBalance: {
       type: Number,
       default: 0,
     },
@@ -37,4 +37,4 @@ const WalletSchema = new Schema<Wallet>(
 
 WalletSchema.index({ walletAddress: 1, chainId: 1 }, { unique: true });
 
-export const WalletModel = mongoose.model<Wallet>('wallet', WalletSchema);
+export const WalletModel = model<Wallet>('wallet', WalletSchema);
