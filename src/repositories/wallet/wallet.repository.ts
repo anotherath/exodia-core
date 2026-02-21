@@ -2,6 +2,8 @@
 import { Injectable } from '@nestjs/common';
 import { WalletModel } from './wallet.model';
 import { Wallet } from 'src/shared/types/wallet.type';
+import { roundWithPrecision } from 'src/shared/utils/math.util';
+import { BALANCE_CONFIG } from 'src/config/balance.config';
 
 @Injectable()
 export class WalletRepository {
@@ -85,11 +87,13 @@ export class WalletRepository {
 
   // Cập nhật lợi nhuận/thua lỗ trực tiếp vào tradeBalance
   async updateTradePnL(walletAddress: string, chainId: number, pnl: number) {
+    // Làm tròn PnL theo cấu hình trước khi cộng vào tradeBalance
+    const roundedPnL = roundWithPrecision(pnl, BALANCE_CONFIG.PRECISION, false);
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          tradeBalance: pnl,
+          tradeBalance: roundedPnL,
         },
       },
     );
