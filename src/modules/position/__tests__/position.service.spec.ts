@@ -7,6 +7,7 @@ import { MarketPriceCache } from '../../market/market-price.cache';
 import { PositionValidationService } from '../position-validation.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { Position } from 'src/shared/types/position.type';
+import { Pair } from 'src/shared/types/pair.type';
 import { HexString } from 'src/shared/types/web3.type';
 
 describe('PositionService', () => {
@@ -33,8 +34,10 @@ describe('PositionService', () => {
     pnl: 0,
   };
 
-  const mockPair = {
+  const mockPair: Pair = {
     instId: 'BTC-USDT',
+    maxLeverage: 100,
+    minVolume: 0.001,
     openFeeRate: 0.0001, // 0.01%
     closeFeeRate: 0.0002, // 0.02%
     isActive: true,
@@ -71,6 +74,7 @@ describe('PositionService', () => {
           provide: PositionValidationService,
           useValue: {
             verifyAndConsumeNonce: jest.fn(),
+            validateSymbolAndParams: jest.fn(),
             validateLimitPrice: jest.fn(),
             validateSLTP: jest.fn(),
             validatePartialClose: jest.fn(),
@@ -96,7 +100,7 @@ describe('PositionService', () => {
   describe('openMarket', () => {
     it(' nên mở lệnh market thành công và trừ phí mở lệnh', async () => {
       priceCache.get.mockReturnValue({ askPx: '50000', bidPx: '49000' } as any);
-      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      validator.validateSymbolAndParams.mockResolvedValue(mockPair);
       repo.create.mockResolvedValue({
         ...mockPosition,
         status: 'open',

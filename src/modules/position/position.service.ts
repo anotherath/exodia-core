@@ -49,6 +49,9 @@ export class PositionService {
       message: typedData as unknown as Record<string, unknown>,
     });
 
+    // Validate symbol và các tham số đầu vào
+    const pair = await this.validator.validateSymbolAndParams(data);
+
     const ticker = this.priceCache.get(data.symbol);
     if (!ticker) {
       throw new BadRequestException(
@@ -63,10 +66,8 @@ export class PositionService {
 
     this.validator.validateSLTP(data.side, entryPrice, data.sl, data.tp);
 
-    // Tính phí mở lệnh
-    const pair = await this.pairRepo.findByInstId(data.symbol);
-    const openFeeRate = pair?.openFeeRate ?? 0;
-    const openFee = calculateFee(data.qty, entryPrice, openFeeRate);
+    // Tính phí mở lệnh (sử dụng pair đã validate)
+    const openFee = calculateFee(data.qty, entryPrice, pair.openFeeRate);
 
     // Trừ phí mở lệnh khỏi tradeBalance ngay lập tức
     await this.walletService.updateTradePnL(
@@ -102,6 +103,9 @@ export class PositionService {
       primaryType: 'OpenOrder',
       message: typedData as unknown as Record<string, unknown>,
     });
+
+    // Validate symbol và các tham số đầu vào
+    await this.validator.validateSymbolAndParams(data);
 
     this.validator.validateLimitPrice(data);
 

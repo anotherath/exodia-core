@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
+import { Pair } from 'src/shared/types/pair.type';
 import type { HexString } from 'src/shared/types/web3.type';
 import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 import { MarketPriceCache } from '../market/market-price.cache';
@@ -9,8 +11,44 @@ import { MarketPriceCache } from '../market/market-price.cache';
 export class PositionValidationService {
   constructor(
     private readonly nonceRepo: NonceRepository,
+    private readonly pairRepo: PairRepository,
     private readonly priceCache: MarketPriceCache,
   ) {}
+
+  // Validate symbol tồn tại, đang active, và các tham số hợp lệ với cấu hình của cặp giao dịch
+  async validateSymbolAndParams(data: Position): Promise<Pair> {
+    const pair = await this.pairRepo.findByInstId(data.symbol);
+
+    if (!pair) {
+      throw new BadRequestException(
+        `Cặp giao dịch '${data.symbol}' không tồn tại trong hệ thống`,
+      );
+    }
+
+    if (!pair.isActive) {
+      throw new BadRequestException(
+        `Cặp giao dịch '${data.symbol}' hiện đang tạm dừng giao dịch`,
+      );
+    }
+
+    if (data.qty < pair.minVolume) {
+      throw new BadRequestException(
+        `Khối lượng tối thiểu cho ${data.symbol} là ${pair.minVolume}`,
+      );
+    }
+
+    if (data.leverage > pair.maxLeverage) {
+      throw new BadRequestException(
+        `Đòn bẩy tối đa cho ${data.symbol} là ${pair.maxLeverage}x`,
+      );
+    }
+
+    if (data.leverage < 1) {
+      throw new BadRequestException('Đòn bẩy phải lớn hơn hoặc bằng 1');
+    }
+
+    return pair;
+  }
 
   // Xác thực chữ ký và tiêu thụ nonce
   async verifyAndConsumeNonce(params: {
