@@ -1,7 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { PositionValidationService } from '../position-validation.service';
-import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { MarketPriceCache } from '../../market/market-price.cache';
 import * as eip712Util from 'src/shared/utils/eip712.util';
 import { HexString } from 'src/shared/types/web3.type';
@@ -14,6 +15,7 @@ describe('PositionValidationService', () => {
   let service: PositionValidationService;
   let nonceRepo: jest.Mocked<NonceRepository>;
   let priceCache: jest.Mocked<MarketPriceCache>;
+  let pairRepo: jest.Mocked<PairRepository>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -32,12 +34,19 @@ describe('PositionValidationService', () => {
             get: jest.fn(),
           },
         },
+        {
+          provide: PairRepository,
+          useValue: {
+            findByInstId: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<PositionValidationService>(PositionValidationService);
     nonceRepo = module.get(NonceRepository);
     priceCache = module.get(MarketPriceCache);
+    pairRepo = module.get(PairRepository);
   });
 
   describe('verifyAndConsumeNonce', () => {
@@ -164,6 +173,67 @@ describe('PositionValidationService', () => {
       expect(() => service.validateSLTP('short', 100, null, 110)).toThrow(
         'Chốt lời (TP) của Short phải thấp hơn giá tham chiếu',
       );
+    });
+  });
+
+  describe('validateSymbolAndParams', () => {
+    const mockPair = {
+      instId: 'BTC-USDT',
+      maxLeverage: 100,
+      minVolume: 0.001,
+      isActive: true,
+      openFeeRate: 0.0001,
+      closeFeeRate: 0.0001,
+    };
+
+    it('should success and return pair', async () => {
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      const result = await service.validateSymbolAndParams({
+        symbol: 'BTC-USDT',
+        qty: 0.1,
+        leverage: 10,
+      } as any);
+      expect(result).toEqual(mockPair);
+    });
+
+    it('should throw if pair not found', async () => {
+      pairRepo.findByInstId.mockResolvedValue(null);
+      await expect(
+        service.validateSymbolAndParams({ symbol: 'UNKNOWN' } as any),
+      ).rejects.toThrow("Cặp giao dịch 'UNKNOWN' không tồn tại trong hệ thống");
+    });
+
+    it('should throw if pair inactive', async () => {
+      pairRepo.findByInstId.mockResolvedValue({
+        ...mockPair,
+        isActive: false,
+      } as any);
+      await expect(
+        service.validateSymbolAndParams({ symbol: 'BTC-USDT' } as any),
+      ).rejects.toThrow(
+        "Cặp giao dịch 'BTC-USDT' hiện đang tạm dừng giao dịch",
+      );
+    });
+
+    it('should throw if qty < minVolume', async () => {
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      await expect(
+        service.validateSymbolAndParams({
+          symbol: 'BTC-USDT',
+          qty: 0.0001,
+        } as any),
+      ).rejects.toThrow('Khối lượng tối thiểu cho BTC-USDT là 0.001');
+    });
+
+    it('should throw if leverage > maxLeverage', async () => {
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      await expect(
+        service.validateSymbolAndParams({
+          symbol: 'BTC-USDT',
+          qty: 0.1,
+          leverage: 125,
+        } as any),
+      ).rejects.toThrow('Đòn bẩy tối đa cho BTC-USDT là 100x');
     });
   });
 });

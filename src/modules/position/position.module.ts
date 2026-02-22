@@ -3,7 +3,7 @@ import { PositionController } from './position.controller';
 import { PositionService } from './position.service';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
-import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
 import { PositionValidationService } from './position-validation.service';
 
 import { MarketModule } from '../market/market.module';

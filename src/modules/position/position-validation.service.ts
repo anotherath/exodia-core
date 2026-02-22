@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import { Pair } from 'src/shared/types/pair.type';

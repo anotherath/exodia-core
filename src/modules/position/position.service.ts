@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PositionRepository } from 'src/repositories/position/position.repository';
-import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import type { HexString } from 'src/shared/types/web3.type';
