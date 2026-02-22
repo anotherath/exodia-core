@@ -149,22 +149,73 @@ export class PositionService {
       throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
 
+    // Đóng lệnh một phần: qty giảm
     if (data.qty && data.qty < pos.qty) {
+      const closeQty = pos.qty - data.qty;
+      this.validator.validatePartialClose(pos, closeQty);
+
       const ticker = this.priceCache.get(pos.symbol);
       if (!ticker)
         throw new BadRequestException('Không có giá thị trường để đóng lệnh');
-    } else if (data.qty && data.qty > pos.qty) {
+
+      const exitPrice =
+        pos.side === 'long'
+          ? parseFloat(ticker.bidPx)
+          : parseFloat(ticker.askPx);
+
+      // Tính PnL cho phần đóng
+      const pnl = calculatePnL(pos.side, closeQty, pos.entryPrice!, exitPrice);
+
+      this.logger.log(
+        `Partial Close Position ${id}: closeQty ${closeQty}, Exit Price ${exitPrice}, PnL ${pnl}`,
+      );
+
+      // Tạo position mới đại diện cho phần đã đóng
+      await this.repo.create({
+        walletAddress: pos.walletAddress,
+        symbol: pos.symbol,
+        side: pos.side,
+        type: pos.type,
+        status: 'closed',
+        qty: closeQty,
+        price: pos.price,
+        entryPrice: pos.entryPrice,
+        exitPrice,
+        leverage: pos.leverage,
+        pnl,
+        sl: pos.sl,
+        tp: pos.tp,
+      });
+
+      // Cập nhật PnL vào tradeBalance
+      await this.walletService.updateTradePnL(
+        pos.walletAddress,
+        EIP712_DOMAIN.chainId,
+        pnl,
+      );
+
+      // Cập nhật vị thế gốc với qty còn lại
+      return this.repo.update(id, {
+        qty: data.qty,
+        sl: data.sl ?? pos.sl,
+        tp: data.tp ?? pos.tp,
+        leverage: data.leverage ?? pos.leverage,
+      });
+    }
+
+    // Không cho tăng qty
+    if (data.qty && data.qty > pos.qty) {
       throw new BadRequestException(
         'Không thể tăng khối lượng vị thế trực tiếp',
       );
     }
 
+    // Cập nhật SL/TP/Leverage (không liên quan đến qty)
     if (data.sl || data.tp) {
       this.validator.validateSLTP(pos.side, pos.entryPrice!, data.sl, data.tp);
     }
 
     return this.repo.update(id, {
-      qty: data.qty,
       sl: data.sl,
       tp: data.tp,
       leverage: data.leverage,

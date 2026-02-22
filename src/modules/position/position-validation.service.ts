@@ -117,4 +117,16 @@ export class PositionValidationService {
       }
     }
   }
+
+  // Validate đóng lệnh một phần
+  validatePartialClose(pos: Position, closeQty: number) {
+    if (closeQty <= 0) {
+      throw new BadRequestException('Khối lượng đóng phải lớn hơn 0');
+    }
+    if (closeQty >= pos.qty) {
+      throw new BadRequestException(
+        'Khối lượng đóng phải nhỏ hơn khối lượng hiện tại. Dùng chức năng đóng lệnh toàn bộ nếu muốn đóng hết',
+      );
+    }
+  }
 }
