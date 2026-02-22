@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { NonceRepository } from 'src/repositories/nonce/nonce.repository';
+import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import type { HexString } from 'src/shared/types/web3.type';
 import {
@@ -17,7 +18,7 @@ import {
 } from 'src/shared/types/eip712.type';
 import { MarketPriceCache } from '../market/market-price.cache';
 import { PositionValidationService } from './position-validation.service';
-import { calculatePnL } from 'src/shared/utils/math.util';
+import { calculatePnL, calculateFee } from 'src/shared/utils/math.util';
 import { WalletService } from '../wallet/wallet.service';
 import { EIP712_DOMAIN } from 'src/shared/types/eip712.type';
 
@@ -27,6 +28,7 @@ export class PositionService {
 
   constructor(
     private readonly repo: PositionRepository,
+    private readonly pairRepo: PairRepository,
     private readonly priceCache: MarketPriceCache,
     private readonly validator: PositionValidationService,
     private readonly walletService: WalletService,
@@ -61,11 +63,28 @@ export class PositionService {
 
     this.validator.validateSLTP(data.side, entryPrice, data.sl, data.tp);
 
+    // Tính phí mở lệnh
+    const pair = await this.pairRepo.findByInstId(data.symbol);
+    const openFeeRate = pair?.openFeeRate ?? 0;
+    const openFee = calculateFee(data.qty, entryPrice, openFeeRate);
+
+    // Trừ phí mở lệnh khỏi tradeBalance ngay lập tức
+    await this.walletService.updateTradePnL(
+      data.walletAddress,
+      EIP712_DOMAIN.chainId,
+      -openFee,
+    );
+
+    this.logger.log(
+      `Open Market ${data.symbol}: Entry ${entryPrice}, Open Fee ${openFee}`,
+    );
+
     return this.repo.create({
       ...data,
       status: 'open',
       entryPrice: entryPrice,
       price: null,
+      openFee,
     });
   }
 
@@ -149,6 +168,12 @@ export class PositionService {
       throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
 
+    if (data.leverage !== undefined && data.leverage !== pos.leverage) {
+      throw new BadRequestException(
+        'Không thể thay đổi đòn bẩy khi vị thế đang mở',
+      );
+    }
+
     // Đóng lệnh một phần: qty giảm
     if (data.qty && data.qty < pos.qty) {
       const closeQty = pos.qty - data.qty;
@@ -163,11 +188,24 @@ export class PositionService {
           ? parseFloat(ticker.bidPx)
           : parseFloat(ticker.askPx);
 
-      // Tính PnL cho phần đóng
-      const pnl = calculatePnL(pos.side, closeQty, pos.entryPrice!, exitPrice);
+      // Tính PnL gốc cho phần đóng
+      const rawPnl = calculatePnL(
+        pos.side,
+        closeQty,
+        pos.entryPrice!,
+        exitPrice,
+      );
+
+      // Tính phí đóng lệnh cho phần đóng
+      const pair = await this.pairRepo.findByInstId(pos.symbol);
+      const closeFeeRate = pair?.closeFeeRate ?? 0;
+      const closeFee = calculateFee(closeQty, exitPrice, closeFeeRate);
+
+      // PnL ròng = PnL gốc - phí đóng
+      const pnl = rawPnl - closeFee;
 
       this.logger.log(
-        `Partial Close Position ${id}: closeQty ${closeQty}, Exit Price ${exitPrice}, PnL ${pnl}`,
+        `Partial Close Position ${id}: closeQty ${closeQty}, Exit Price ${exitPrice}, Close Fee ${closeFee}, PnL ${pnl}`,
       );
 
       // Tạo position mới đại diện cho phần đã đóng
@@ -183,11 +221,12 @@ export class PositionService {
         exitPrice,
         leverage: pos.leverage,
         pnl,
+        closeFee,
         sl: pos.sl,
         tp: pos.tp,
       });
 
-      // Cập nhật PnL vào tradeBalance
+      // Cập nhật PnL ròng (đã trừ phí đóng) vào tradeBalance
       await this.walletService.updateTradePnL(
         pos.walletAddress,
         EIP712_DOMAIN.chainId,
@@ -199,7 +238,6 @@ export class PositionService {
         qty: data.qty,
         sl: data.sl ?? pos.sl,
         tp: data.tp ?? pos.tp,
-        leverage: data.leverage ?? pos.leverage,
       });
     }
 
@@ -210,7 +248,7 @@ export class PositionService {
       );
     }
 
-    // Cập nhật SL/TP/Leverage (không liên quan đến qty)
+    // Cập nhật SL/TP (không liên quan đến qty)
     if (data.sl || data.tp) {
       this.validator.validateSLTP(pos.side, pos.entryPrice!, data.sl, data.tp);
     }
@@ -218,7 +256,6 @@ export class PositionService {
     return this.repo.update(id, {
       sl: data.sl,
       tp: data.tp,
-      leverage: data.leverage,
     });
   }
 
@@ -271,20 +308,28 @@ export class PositionService {
 
     const exitPrice =
       pos.side === 'long' ? parseFloat(ticker.bidPx) : parseFloat(ticker.askPx);
-    const pnl = calculatePnL(pos.side, pos.qty, pos.entryPrice!, exitPrice);
+    const rawPnl = calculatePnL(pos.side, pos.qty, pos.entryPrice!, exitPrice);
+
+    // Tính phí đóng lệnh
+    const pair = await this.pairRepo.findByInstId(pos.symbol);
+    const closeFeeRate = pair?.closeFeeRate ?? 0;
+    const closeFee = calculateFee(pos.qty, exitPrice, closeFeeRate);
+
+    // PnL ròng = PnL gốc - phí đóng
+    const pnl = rawPnl - closeFee;
 
     this.logger.log(
-      `Closing Position ${id}: Exit Price ${exitPrice}, PnL ${pnl}`,
+      `Closing Position ${id}: Exit Price ${exitPrice}, Close Fee ${closeFee}, PnL ${pnl}`,
     );
 
-    // Cập nhật PnL vào tradeBalance của ví
+    // Cập nhật PnL ròng (đã trừ phí đóng) vào tradeBalance
     await this.walletService.updateTradePnL(
       pos.walletAddress,
       EIP712_DOMAIN.chainId,
       pnl,
     );
 
-    return this.repo.close(id, pnl, exitPrice);
+    return this.repo.close(id, pnl, exitPrice, closeFee);
   }
 
   // Lấy danh sách lệnh chờ

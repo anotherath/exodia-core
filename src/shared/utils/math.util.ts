@@ -57,3 +57,20 @@ export const calculateReceivedAmount = (
   const initialMargin = (qty * entryPrice) / leverage;
   return initialMargin + pnl;
 };
+
+/**
+ * Tính phí giao dịch dựa trên giá trị vị thế (Notional Value).
+ * Phí = Qty * Price * FeeRate
+ *
+ * @param qty - Khối lượng
+ * @param price - Giá (entryPrice hoặc exitPrice)
+ * @param feeRate - Tỷ lệ phí (e.g., 0.0001 = 0.01%)
+ * @returns Phí giao dịch (USDT)
+ */
+export const calculateFee = (
+  qty: number,
+  price: number,
+  feeRate: number,
+): number => {
+  return qty * price * feeRate;
+};

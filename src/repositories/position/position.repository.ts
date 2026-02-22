@@ -55,6 +55,7 @@ export class PositionRepository {
     id: string,
     pnl: number,
     exitPrice: number,
+    closeFee: number = 0,
   ): Promise<Position | null> {
     return PositionModel.findOneAndUpdate(
       { _id: id, ...this.baseQuery() },
@@ -63,6 +64,7 @@ export class PositionRepository {
           status: 'closed',
           pnl,
           exitPrice,
+          closeFee,
         },
       },
       { new: true },

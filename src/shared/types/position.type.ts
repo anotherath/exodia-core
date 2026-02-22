@@ -42,6 +42,10 @@ export interface Position {
   tp?: number | null;
   sl?: number | null;
 
+  // phí giao dịch (USDT)
+  openFee?: number;
+  closeFee?: number;
+
   // soft delete
   deletedAt?: Date | null;
 

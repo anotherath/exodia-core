@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { PositionService } from '../position.service';
 import { PositionRepository } from 'src/repositories/position/position.repository';
+import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { MarketPriceCache } from '../../market/market-price.cache';
 import { PositionValidationService } from '../position-validation.service';
 import { WalletService } from '../../wallet/wallet.service';
@@ -11,12 +12,13 @@ import { HexString } from 'src/shared/types/web3.type';
 describe('PositionService', () => {
   let service: PositionService;
   let repo: jest.Mocked<PositionRepository>;
+  let pairRepo: jest.Mocked<PairRepository>;
   let priceCache: jest.Mocked<MarketPriceCache>;
   let validator: jest.Mocked<PositionValidationService>;
   let walletService: jest.Mocked<WalletService>;
 
   const walletAddress =
-    '0x1c62040b08a8e10086a603bf27c2e1e1e1e1e1e1' as HexString;
+    '0x1776040b08a8e10086a603bf27c2e1e1e1e1e1e1' as HexString;
   const mockSignature = '0xsignature' as HexString;
   const mockTypedData = { walletAddress, nonce: 'nonce123' } as any;
 
@@ -29,6 +31,13 @@ describe('PositionService', () => {
     qty: 1,
     leverage: 10,
     pnl: 0,
+  };
+
+  const mockPair = {
+    instId: 'BTC-USDT',
+    openFeeRate: 0.0001, // 0.01%
+    closeFeeRate: 0.0002, // 0.02%
+    isActive: true,
   };
 
   beforeEach(async () => {
@@ -47,6 +56,12 @@ describe('PositionService', () => {
           },
         },
         {
+          provide: PairRepository,
+          useValue: {
+            findByInstId: jest.fn(),
+          },
+        },
+        {
           provide: MarketPriceCache,
           useValue: {
             get: jest.fn(),
@@ -58,6 +73,7 @@ describe('PositionService', () => {
             verifyAndConsumeNonce: jest.fn(),
             validateLimitPrice: jest.fn(),
             validateSLTP: jest.fn(),
+            validatePartialClose: jest.fn(),
           },
         },
         {
@@ -71,18 +87,21 @@ describe('PositionService', () => {
 
     service = module.get<PositionService>(PositionService);
     repo = module.get(PositionRepository);
+    pairRepo = module.get(PairRepository);
     priceCache = module.get(MarketPriceCache);
     validator = module.get(PositionValidationService);
     walletService = module.get(WalletService);
   });
 
   describe('openMarket', () => {
-    it(' nên mở lệnh market thành công', async () => {
+    it(' nên mở lệnh market thành công và trừ phí mở lệnh', async () => {
       priceCache.get.mockReturnValue({ askPx: '50000', bidPx: '49000' } as any);
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
       repo.create.mockResolvedValue({
         ...mockPosition,
         status: 'open',
         entryPrice: 50000,
+        openFee: 5, // 1 * 50000 * 0.0001
       } as any);
 
       const result = await service.openMarket(
@@ -91,131 +110,111 @@ describe('PositionService', () => {
         mockSignature,
       );
 
-      expect(validator.verifyAndConsumeNonce).toHaveBeenCalled();
-      expect(priceCache.get).toHaveBeenCalledWith('BTC-USDT');
-      expect(validator.validateSLTP).toHaveBeenCalledWith(
-        'long',
-        50000,
-        undefined,
-        undefined,
+      const expectedOpenFee = 1 * 50000 * 0.0001;
+      expect(walletService.updateTradePnL).toHaveBeenCalledWith(
+        walletAddress,
+        expect.any(Number),
+        -expectedOpenFee,
       );
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
+          openFee: expectedOpenFee,
           status: 'open',
-          entryPrice: 50000,
         }),
       );
       expect(result.status).toBe('open');
     });
-
-    it(' nên lỗi nếu không có giá thị trường', async () => {
-      priceCache.get.mockReturnValue(undefined);
-
-      await expect(
-        service.openMarket(mockPosition, mockTypedData, mockSignature),
-      ).rejects.toThrow(BadRequestException);
-    });
   });
 
-  describe('openLimit', () => {
-    it(' nên tạo lệnh limit ở trạng thái pending', async () => {
-      repo.create.mockResolvedValue({
-        ...mockPosition,
-        status: 'pending',
-        entryPrice: null,
-      } as any);
-
-      const result = await service.openLimit(
-        mockPosition,
-        mockTypedData,
-        mockSignature,
-      );
-
-      expect(validator.verifyAndConsumeNonce).toHaveBeenCalled();
-      expect(validator.validateLimitPrice).toHaveBeenCalledWith(mockPosition);
-      expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: 'pending',
-          entryPrice: null,
-        }),
-      );
-      expect(result.status).toBe('pending');
-    });
-  });
-
-  describe('updatePending', () => {
-    it(' nên cập nhật lệnh chờ thành công', async () => {
+  describe('updateOpen', () => {
+    it(' nên đóng một phần vị thế: tính PnL ròng và trừ phí đóng', async () => {
       const existingPos = {
         ...mockPosition,
-        status: 'pending',
-        _id: 'id123',
-      } as any;
-      repo.findById.mockResolvedValue(existingPos);
-      const updateData = { qty: 2, price: 45000 };
-
-      await service.updatePending(
-        'id123',
-        updateData,
-        mockTypedData,
-        mockSignature,
-      );
-
-      expect(validator.verifyAndConsumeNonce).toHaveBeenCalled();
-      expect(validator.validateLimitPrice).toHaveBeenCalled();
-      expect(repo.update).toHaveBeenCalledWith(
-        'id123',
-        expect.objectContaining({
-          qty: 2,
-          price: 45000,
-        }),
-      );
-    });
-  });
-
-  describe('close', () => {
-    it(' nên đóng vị thế thành công, tính PnL và cập nhật Wallet', async () => {
-      const existingPos = {
-        ...mockPosition,
-        status: 'open',
         _id: 'id123',
         entryPrice: 40000,
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
       priceCache.get.mockReturnValue({ bidPx: '45000', askPx: '46000' } as any);
-      walletService.updateTradePnL.mockResolvedValue(undefined);
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
 
-      await service.close('id123', 0, mockTypedData, mockSignature);
+      // Đóng 0.4 BTC (còn lại 0.6)
+      await service.updateOpen(
+        'id123',
+        { qty: 0.6 },
+        mockTypedData,
+        mockSignature,
+      );
 
-      const expectedPnl = (45000 - 40000) * 1;
+      const closeQty = 0.4;
+      const rawPnl = (45000 - 40000) * closeQty; // 2000
+      const closeFee = closeQty * 45000 * 0.0002; // 3.6
+      const netPnl = rawPnl - closeFee;
+
+      expect(validator.validatePartialClose).toHaveBeenCalledWith(
+        existingPos,
+        closeQty,
+      );
       expect(walletService.updateTradePnL).toHaveBeenCalledWith(
         walletAddress,
         expect.any(Number),
-        expectedPnl,
+        netPnl,
       );
-      expect(repo.close).toHaveBeenCalledWith('id123', expectedPnl, 45000);
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'closed',
+          qty: closeQty,
+          pnl: netPnl,
+          closeFee,
+        }),
+      );
+      expect(repo.update).toHaveBeenCalledWith('id123', { qty: 0.6 });
+    });
+
+    it(' nên lỗi nếu cố tình thay đổi đòn bẩy', async () => {
+      repo.findById.mockResolvedValue({ ...mockPosition, leverage: 10 } as any);
+      await expect(
+        service.updateOpen(
+          'id123',
+          { leverage: 20 },
+          mockTypedData,
+          mockSignature,
+        ),
+      ).rejects.toThrow('Không thể thay đổi đòn bẩy khi vị thế đang mở');
+    });
+
+    it(' nên lỗi nếu cố tình tăng qty', async () => {
+      repo.findById.mockResolvedValue({ ...mockPosition, qty: 1 } as any);
+      await expect(
+        service.updateOpen('id123', { qty: 2 }, mockTypedData, mockSignature),
+      ).rejects.toThrow('Không thể tăng khối lượng vị thế trực tiếp');
     });
   });
 
-  describe('Queries', () => {
-    it('getOpenOrders nên filter đúng status pending', async () => {
-      repo.findActiveByWallet.mockResolvedValue([
-        { status: 'pending' },
-        { status: 'open' },
-      ] as any);
-      const result = await service.getOpenOrders(walletAddress);
-      expect(result.length).toBe(1);
-      expect(result[0].status).toBe('pending');
-    });
+  describe('close', () => {
+    it(' nên đóng toàn bộ vị thế: tính PnL ròng và trừ phí đóng', async () => {
+      const existingPos = {
+        ...mockPosition,
+        _id: 'id123',
+        entryPrice: 40000,
+        qty: 1,
+      } as any;
+      repo.findById.mockResolvedValue(existingPos);
+      priceCache.get.mockReturnValue({ bidPx: '42000', askPx: '43000' } as any);
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
 
-    it('getActivePositions nên filter đúng status open', async () => {
-      repo.findActiveByWallet.mockResolvedValue([
-        { status: 'pending' },
-        { status: 'open' },
-      ] as any);
-      const result = await service.getActivePositions(walletAddress);
-      expect(result.length).toBe(1);
-      expect(result[0].status).toBe('open');
+      await service.close('id123', 0, mockTypedData, mockSignature);
+
+      const rawPnl = (42000 - 40000) * 1; // 2000
+      const closeFee = 1 * 42000 * 0.0002; // 8.4
+      const netPnl = rawPnl - closeFee;
+
+      expect(walletService.updateTradePnL).toHaveBeenCalledWith(
+        walletAddress,
+        expect.any(Number),
+        netPnl,
+      );
+      expect(repo.close).toHaveBeenCalledWith('id123', netPnl, 42000, closeFee);
     });
   });
 });

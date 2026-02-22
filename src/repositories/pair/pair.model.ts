@@ -21,7 +21,12 @@ const PairSchema = new Schema<Pair>(
       min: 0,
       default: 10,
     },
-    feeRate: {
+    openFeeRate: {
+      type: Number,
+      required: true,
+      default: 0.0001, // 0.01%
+    },
+    closeFeeRate: {
       type: Number,
       required: true,
       default: 0.0001, // 0.01%

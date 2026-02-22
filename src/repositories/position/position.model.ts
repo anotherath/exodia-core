@@ -89,6 +89,16 @@ const PositionSchema = new Schema<Position>(
       default: null,
     },
 
+    // phí giao dịch (USDT)
+    openFee: {
+      type: Number,
+      default: 0,
+    },
+    closeFee: {
+      type: Number,
+      default: 0,
+    },
+
     // soft delete (nếu cần)
     deletedAt: {
       type: Date,
