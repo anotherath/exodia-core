@@ -1,0 +1,32 @@
+services:
+  mongodb:
+    image: ${MONGO_IMAGE}
+    container_name: ${MONGO_CONTAINER_NAME}
+    ports:
+      - '${MONGO_PORT}:27017'
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    networks:
+      - custom-network
+    restart: always
+
+  redis:
+    image: ${REDIS_IMAGE}
+    container_name: ${REDIS_CONTAINER_NAME}
+    ports:
+      - '${REDIS_PORT}:6379'
+    networks:
+      - custom-network
+    restart: always
+
+networks:
+  custom-network:
+    name: ${NETWORK_NAME}
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    name: ${PROJECT_NAME}_mongodb_data
