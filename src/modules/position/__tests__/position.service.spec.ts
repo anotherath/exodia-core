@@ -99,7 +99,10 @@ describe('PositionService', () => {
 
   describe('openMarket', () => {
     it(' nên mở lệnh market thành công và trừ phí mở lệnh', async () => {
-      priceCache.get.mockReturnValue({ askPx: '50000', bidPx: '49000' } as any);
+      priceCache.get.mockResolvedValue({
+        askPx: '50000',
+        bidPx: '49000',
+      } as any);
       validator.validateSymbolAndParams.mockResolvedValue(mockPair);
       repo.create.mockResolvedValue({
         ...mockPosition,
@@ -139,7 +142,10 @@ describe('PositionService', () => {
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
-      priceCache.get.mockReturnValue({ bidPx: '45000', askPx: '46000' } as any);
+      priceCache.get.mockResolvedValue({
+        bidPx: '45000',
+        askPx: '46000',
+      } as any);
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
 
       // Đóng 0.4 BTC (còn lại 0.6)
@@ -204,7 +210,10 @@ describe('PositionService', () => {
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
-      priceCache.get.mockReturnValue({ bidPx: '42000', askPx: '43000' } as any);
+      priceCache.get.mockResolvedValue({
+        bidPx: '42000',
+        askPx: '43000',
+      } as any);
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
 
       await service.close('id123', 0, mockTypedData, mockSignature);

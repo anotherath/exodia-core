@@ -66,7 +66,7 @@ describe('RealTimeService', () => {
     const mockTicker = { instId: 'BTC-USDT', last: '50000' } as TickerData;
 
     // Giả lập OKX bắn giá về
-    onTickerCallback(mockTicker);
+    await onTickerCallback(mockTicker);
 
     expect(cache.update).toHaveBeenCalledWith(mockTicker);
     expect(gateway.emitTicker).toHaveBeenCalledWith(mockTicker);

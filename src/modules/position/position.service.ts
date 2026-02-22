@@ -52,7 +52,7 @@ export class PositionService {
     // Validate symbol và các tham số đầu vào
     const pair = await this.validator.validateSymbolAndParams(data);
 
-    const ticker = this.priceCache.get(data.symbol);
+    const ticker = await this.priceCache.get(data.symbol);
     if (!ticker) {
       throw new BadRequestException(
         'Hiện chưa có giá thị trường cho cặp tiền này',
@@ -107,7 +107,7 @@ export class PositionService {
     // Validate symbol và các tham số đầu vào
     await this.validator.validateSymbolAndParams(data);
 
-    this.validator.validateLimitPrice(data);
+    await this.validator.validateLimitPrice(data);
 
     return this.repo.create({
       ...data,
@@ -140,7 +140,7 @@ export class PositionService {
     }
 
     const updatedData: Position = { ...pos, ...data };
-    this.validator.validateLimitPrice(updatedData);
+    await this.validator.validateLimitPrice(updatedData);
 
     return this.repo.update(id, {
       qty: data.qty,
@@ -183,7 +183,7 @@ export class PositionService {
       const closeQty = pos.qty - data.qty;
       this.validator.validatePartialClose(pos, closeQty);
 
-      const ticker = this.priceCache.get(pos.symbol);
+      const ticker = await this.priceCache.get(pos.symbol);
       if (!ticker)
         throw new BadRequestException('Không có giá thị trường để đóng lệnh');
 
@@ -306,7 +306,7 @@ export class PositionService {
       throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
 
-    const ticker = this.priceCache.get(pos.symbol);
+    const ticker = await this.priceCache.get(pos.symbol);
     if (!ticker)
       throw new BadRequestException('Không có giá thị trường để đóng lệnh');
 

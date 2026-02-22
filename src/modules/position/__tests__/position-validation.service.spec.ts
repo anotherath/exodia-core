@@ -89,57 +89,57 @@ describe('PositionValidationService', () => {
   });
 
   describe('validateLimitPrice', () => {
-    it('should throw if price <= 0', () => {
-      expect(() => service.validateLimitPrice({ price: 0 } as any)).toThrow(
-        'Giá đặt (Limit Price) không hợp lệ',
-      );
+    it('should throw if price <= 0', async () => {
+      await expect(
+        service.validateLimitPrice({ price: 0 } as any),
+      ).rejects.toThrow('Giá đặt (Limit Price) không hợp lệ');
     });
 
-    it('should throw if no market price', () => {
-      priceCache.get.mockReturnValue(undefined);
-      expect(() =>
+    it('should throw if no market price', async () => {
+      priceCache.get.mockResolvedValue(undefined);
+      await expect(
         service.validateLimitPrice({ symbol: 'BTC', price: 100 } as any),
-      ).toThrow('Hiện chưa có giá thị trường cho cặp tiền này');
+      ).rejects.toThrow('Hiện chưa có giá thị trường cho cặp tiền này');
     });
 
-    it('should validate long limit price', () => {
-      priceCache.get.mockReturnValue({ askPx: '100', bidPx: '90' } as any);
+    it('should validate long limit price', async () => {
+      priceCache.get.mockResolvedValue({ askPx: '100', bidPx: '90' } as any);
       // Valid long: price < ask
-      expect(() =>
+      await expect(
         service.validateLimitPrice({
           symbol: 'BTC',
           side: 'long',
           price: 95,
         } as any),
-      ).not.toThrow();
+      ).resolves.not.toThrow();
       // Invalid long: price >= ask
-      expect(() =>
+      await expect(
         service.validateLimitPrice({
           symbol: 'BTC',
           side: 'long',
           price: 105,
         } as any),
-      ).toThrow('Giá Long Limit phải thấp hơn giá thị trường hiện tại');
+      ).rejects.toThrow('Giá Long Limit phải thấp hơn giá thị trường hiện tại');
     });
 
-    it('should validate short limit price', () => {
-      priceCache.get.mockReturnValue({ askPx: '100', bidPx: '90' } as any);
+    it('should validate short limit price', async () => {
+      priceCache.get.mockResolvedValue({ askPx: '100', bidPx: '90' } as any);
       // Valid short: price > bid
-      expect(() =>
+      await expect(
         service.validateLimitPrice({
           symbol: 'BTC',
           side: 'short',
           price: 95,
         } as any),
-      ).not.toThrow();
+      ).resolves.not.toThrow();
       // Invalid short: price <= bid
-      expect(() =>
+      await expect(
         service.validateLimitPrice({
           symbol: 'BTC',
           side: 'short',
           price: 85,
         } as any),
-      ).toThrow('Giá Short Limit phải cao hơn giá thị trường hiện tại');
+      ).rejects.toThrow('Giá Short Limit phải cao hơn giá thị trường hiện tại');
     });
   });
 

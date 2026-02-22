@@ -83,14 +83,14 @@ export class PositionValidationService {
   }
 
   // Kiểm tra tính hợp lệ giá đặt cho lệnh Limit
-  validateLimitPrice(data: Position) {
+  async validateLimitPrice(data: Position) {
     const { symbol, side, price, tp, sl } = data;
 
     if (!price || price <= 0) {
       throw new BadRequestException('Giá đặt (Limit Price) không hợp lệ');
     }
 
-    const ticker = this.priceCache.get(symbol);
+    const ticker = await this.priceCache.get(symbol);
     if (!ticker) {
       throw new BadRequestException(
         'Hiện chưa có giá thị trường cho cặp tiền này',

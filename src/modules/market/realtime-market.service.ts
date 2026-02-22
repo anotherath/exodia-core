@@ -41,9 +41,9 @@ export class RealTimeService implements OnModuleInit {
   /**
    * Handle incoming ticker data from OKX.
    */
-  private onTicker(ticker: TickerData) {
-    // Update In-Memory Cache
-    this.priceCache.update(ticker);
+  private async onTicker(ticker: TickerData) {
+    // Update In-Memory Cache (Now Redis backed)
+    await this.priceCache.update(ticker);
 
     // Push to WebSocket clients
     this.rtGateway.emitTicker(ticker);
