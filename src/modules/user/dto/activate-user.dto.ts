@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { HexString } from 'src/shared/types/web3.type';
 
 export class ActivateUserDto {
   @ApiProperty({
@@ -9,7 +8,7 @@ export class ActivateUserDto {
   walletAddress: string;
 
   @ApiProperty({
-    description: 'Nonce nhận được từ API /nounce/get-nonce',
+    description: 'Nonce nhận được từ API /nonce/get-nonce',
     example: 'a1b2c3d4e5f6g7h8',
   })
   nonce: string;
@@ -24,5 +23,5 @@ export class ActivateUserDto {
     description: 'Chữ ký EIP-712',
     example: '0x...',
   })
-  signature: HexString;
+  signature: string;
 }

@@ -29,18 +29,14 @@ describe('NonceController', () => {
   });
 
   it('nên trả về nonce thành công', async () => {
-    const mockNonce = {
-      walletAddress: walletAddress.toLowerCase(),
-      nonce: 'fake_nonce',
-      expiresAt: new Date(),
-    };
-    service.getNonce.mockResolvedValue(mockNonce as any);
+    const mockNonce = 'fake_nonce';
+    service.getNonce.mockResolvedValue(mockNonce);
 
     const result = await controller.getNonce(walletAddress);
 
     expect(service.getNonce).toHaveBeenCalledWith(walletAddress);
     expect(result).toEqual({
-      nounce: mockNonce,
+      nonce: mockNonce,
     });
   });
 

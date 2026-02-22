@@ -1,13 +1,23 @@
 import { Controller, Get, Post, Body, Query } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import type { HexString } from 'src/shared/types/web3.type';
 import { WalletService } from './wallet.service';
+import { WalletTransactionDto } from './dto/wallet-transaction.dto';
 
+@ApiTags('Wallet')
 @Controller('wallet')
 export class WalletController {
   constructor(private readonly walletService: WalletService) {}
 
-  // GET /wallet?walletAddress=0x...&chainId=1
   @Get()
+  @ApiOperation({ summary: 'Lấy thông tin ví và số dư của người dùng' })
+  @ApiQuery({
+    name: 'walletAddress',
+    description: 'Địa chỉ ví',
+    example: '0x123...',
+  })
+  @ApiQuery({ name: 'chainId', description: 'ID của mạng (chain)', example: 1 })
+  @ApiResponse({ status: 200, description: 'Trả về thông tin ví và số dư' })
   async getWallet(
     @Query('walletAddress') walletAddress: HexString,
     @Query('chainId') chainId: number,
@@ -24,18 +34,14 @@ export class WalletController {
     };
   }
 
-  // POST /wallet/deposit-trade
   @Post('deposit-trade')
-  async depositToTrade(
-    @Body()
-    body: {
-      walletAddress: HexString;
-      chainId: number;
-      amount: number;
-    },
-  ) {
+  @ApiOperation({
+    summary: 'Nạp tiền từ ví chính vào tài khoản giao dịch (Trade Balance)',
+  })
+  @ApiResponse({ status: 201, description: 'Nạp tiền thành công' })
+  async depositToTrade(@Body() body: WalletTransactionDto) {
     await this.walletService.depositToTrade(
-      body.walletAddress,
+      body.walletAddress as HexString,
       body.chainId,
       body.amount,
     );
@@ -43,18 +49,12 @@ export class WalletController {
     return { success: true };
   }
 
-  // POST /wallet/withdraw-trade
   @Post('withdraw-trade')
-  async withdrawFromTrade(
-    @Body()
-    body: {
-      walletAddress: HexString;
-      chainId: number;
-      amount: number;
-    },
-  ) {
+  @ApiOperation({ summary: 'Rút tiền từ tài khoản giao dịch về ví chính' })
+  @ApiResponse({ status: 201, description: 'Rút tiền thành công' })
+  async withdrawFromTrade(@Body() body: WalletTransactionDto) {
     await this.walletService.withdrawFromTrade(
-      body.walletAddress,
+      body.walletAddress as HexString,
       body.chainId,
       body.amount,
     );
