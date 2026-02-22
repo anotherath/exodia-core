@@ -36,6 +36,11 @@ export class WalletRepository {
 
   // Nạp tiền vào balance
   async deposit(walletAddress: string, chainId: number, amount: number) {
+    const roundedAmount = roundWithPrecision(
+      amount,
+      BALANCE_CONFIG.PRECISION,
+      false,
+    );
     await WalletModel.updateOne(
       {
         walletAddress: walletAddress.toLowerCase(),
@@ -43,8 +48,8 @@ export class WalletRepository {
       },
       {
         $inc: {
-          balance: amount,
-          totalDeposited: amount,
+          balance: roundedAmount,
+          totalDeposited: roundedAmount,
         },
         $setOnInsert: {
           tradeBalance: 0,
@@ -57,12 +62,17 @@ export class WalletRepository {
 
   // Chuyển tiền từ quỹ khả dụng (balance) sang quỹ giao dịch (tradeBalance)
   async depositToTrade(walletAddress: string, chainId: number, amount: number) {
+    const roundedAmount = roundWithPrecision(
+      amount,
+      BALANCE_CONFIG.PRECISION,
+      false,
+    );
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: -amount,
-          tradeBalance: amount,
+          balance: -roundedAmount,
+          tradeBalance: roundedAmount,
         },
       },
     );
@@ -74,12 +84,17 @@ export class WalletRepository {
     chainId: number,
     amount: number,
   ) {
+    const roundedAmount = roundWithPrecision(
+      amount,
+      BALANCE_CONFIG.PRECISION,
+      false,
+    );
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: amount,
-          tradeBalance: -amount,
+          balance: roundedAmount,
+          tradeBalance: -roundedAmount,
         },
       },
     );
@@ -101,12 +116,17 @@ export class WalletRepository {
 
   // Rút tiền khỏi hệ thống
   async withdraw(walletAddress: string, chainId: number, amount: number) {
+    const roundedAmount = roundWithPrecision(
+      amount,
+      BALANCE_CONFIG.PRECISION,
+      false,
+    );
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
       {
         $inc: {
-          balance: -amount,
-          totalWithdrawn: amount,
+          balance: -roundedAmount,
+          totalWithdrawn: roundedAmount,
         },
       },
     );
