@@ -21,6 +21,11 @@ const PairSchema = new Schema<Pair>(
       min: 0,
       default: 10,
     },
+    feeRate: {
+      type: Number,
+      required: true,
+      default: 0.0001, // 0.01%
+    },
     isActive: {
       type: Boolean,
       default: true,
