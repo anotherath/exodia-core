@@ -1,707 +1,411 @@
 # Cross-Margin Redis Architecture — Exodia Core
 
-Tài liệu thiết kế cấu trúc dữ liệu Redis cho hệ thống giao dịch Cross-Margin Perpetual Futures.
-Bao gồm: cấu trúc key, luồng dữ liệu, các vấn đề tiềm ẩn, rủi ro, và giải pháp đề xuất.
+Tài liệu thiết kế cách lưu trữ dữ liệu giao dịch Cross-Margin trên Redis.
 
 ---
 
-## Mục lục
+## 1. Cross-Margin là gì?
 
-1. [Tổng quan Cross-Margin](#1-tổng-quan-cross-margin)
-2. [Cấu trúc dữ liệu Redis](#2-cấu-trúc-dữ-liệu-redis)
-3. [Luồng dữ liệu khi vào lệnh](#3-luồng-dữ-liệu-khi-vào-lệnh)
-4. [Cold Start: Khi chưa có lệnh nào](#4-cold-start-khi-chưa-có-lệnh-nào)
-5. [Vấn đề, Rủi ro & Giải pháp](#5-vấn-đề-rủi-ro--giải-pháp)
-6. [Công thức tính toán](#6-công-thức-tính-toán)
-7. [Luồng giao tiếp NestJS ↔ Go Engine](#7-luồng-giao-tiếp-nestjs--go-engine)
+Cross-Margin nghĩa là **tất cả tiền trong quỹ giao dịch (`tradeBalance`) được dùng chung cho mọi vị thế**.
 
----
+Ví dụ: Bạn có 1000 USDT, mở 3 vị thế → cả 3 chia sẻ chung 1000 USDT này.
 
-## 1. Tổng quan Cross-Margin
-
-Trong chế độ **Cross-Margin**, toàn bộ số dư giao dịch (`tradeBalance`) được dùng làm **tài sản thế chấp chung (shared collateral)** cho tất cả các vị thế đang mở. Điều này có nghĩa:
-
-- ✅ Lợi nhuận từ vị thế A bù đắp thua lỗ từ vị thế B
-- ✅ Hiệu quả vốn cao hơn so với Isolated Margin
-- ⚠️ **Rủi ro cao hơn**: một vị thế thua lỗ nặng có thể kéo thanh lý toàn bộ tài khoản
-
-### Các chỉ số chính cần theo dõi real-time
-
-| Chỉ số             | Mô tả                                                                           | Tần suất cập nhật         |
-| ------------------ | ------------------------------------------------------------------------------- | ------------------------- |
-| **Total Equity**   | Tổng tài sản tạm tính = `tradeBalance + Σ(Unrealized PnL)`                      | Real-time (mỗi tick giá)  |
-| **Unrealized PnL** | PnL chưa thực hiện của từng vị thế đang mở                                      | Real-time (mỗi tick giá)  |
-| **Margin Buffer**  | Số dư còn lại trước khi bị thanh lý = `Total Equity - Total Maintenance Margin` | Real-time                 |
-| **Realized PnL**   | PnL đã thực hiện (đã cộng/trừ vào `tradeBalance`)                               | Khi đóng lệnh             |
-| **Trade Balance**  | Số dư giao dịch trong MongoDB (source of truth)                                 | Khi đóng lệnh / nạp / rút |
+- ✅ Lời ở vị thế A bù lỗ cho vị thế B
+- ⚠️ Nếu lỗ quá nặng → **thanh lý toàn bộ tài khoản** (không chỉ 1 vị thế)
 
 ---
 
-## 2. Cấu trúc dữ liệu Redis
+## 2. Những con số cần theo dõi real-time
 
-### 2.1 Account Summary (Tổng hợp tài khoản)
+| Con số             | Ý nghĩa đơn giản                                 | Ai cập nhật?              |
+| ------------------ | ------------------------------------------------ | ------------------------- |
+| **Trade Balance**  | Số tiền thật trong tài khoản giao dịch           | MongoDB (source of truth) |
+| **Unrealized PnL** | Lời/lỗ tạm tính của các lệnh đang mở (chưa đóng) | Go Engine (mỗi tick giá)  |
+| **Total Equity**   | = Trade Balance + Unrealized PnL                 | Go Engine                 |
+| **Margin Buffer**  | Số tiền còn lại trước khi bị thanh lý            | Go Engine                 |
+| **Realized PnL**   | Lời/lỗ thật (đã đóng lệnh, đã cộng/trừ tiền)     | NestJS (khi đóng lệnh)    |
+
+---
+
+## 3. Redis lưu gì?
+
+### 3.1 Thông tin tài khoản — `account:{wallet}`
 
 ```
-KEY:    account:{walletAddress}
-TYPE:   Hash
-TTL:    Không (persistent, xóa khi không còn vị thế nào)
+KEY:  account:0xABC...
+TYPE: Hash
 ```
 
-| Field                    | Type                   | Mô tả                                                       |
-| ------------------------ | ---------------------- | ----------------------------------------------------------- |
-| `tradeBalance`           | string (number)        | Snapshot từ MongoDB, đồng bộ lúc mở lệnh đầu tiên           |
-| `totalEquity`            | string (number)        | `tradeBalance + totalUnrealizedPnL`                         |
-| `totalUnrealizedPnL`     | string (number)        | Tổng uPnL tất cả vị thế, cập nhật bởi Go Engine             |
-| `totalMaintenanceMargin` | string (number)        | Tổng MM, dùng để check thanh lý                             |
-| `totalInitialMargin`     | string (number)        | Tổng IM, dùng để check đủ margin mở lệnh mới                |
-| `marginBuffer`           | string (number)        | `totalEquity - totalMaintenanceMargin`                      |
-| `marginRatio`            | string (number)        | `totalMaintenanceMargin / totalEquity` (0~1, ≥1 = thanh lý) |
-| `positionCount`          | string (number)        | Số lượng vị thế đang mở                                     |
-| `updatedAt`              | string (ISO timestamp) | Thời điểm cập nhật cuối                                     |
+| Field                    | Ví dụ     | Giải thích                                     |
+| ------------------------ | --------- | ---------------------------------------------- |
+| `tradeBalance`           | `"1000"`  | Copy từ MongoDB, đồng bộ khi mở/đóng lệnh      |
+| `totalEquity`            | `"1050"`  | tradeBalance + tổng uPnL                       |
+| `totalUnrealizedPnL`     | `"50"`    | Tổng lời/lỗ tạm tính                           |
+| `totalInitialMargin`     | `"200"`   | Tổng tiền ký quỹ đang khóa                     |
+| `totalMaintenanceMargin` | `"40"`    | Mức ký quỹ tối thiểu (dưới mức này → thanh lý) |
+| `marginBuffer`           | `"1010"`  | = equity - maintenance margin                  |
+| `marginRatio`            | `"0.038"` | = maintenance margin / equity (≥1 → thanh lý)  |
+| `positionCount`          | `"3"`     | Số vị thế đang mở                              |
 
 > [!IMPORTANT]
-> `tradeBalance` trong Redis chỉ là **snapshot**. Source of truth vẫn là MongoDB.
-> Khi có lệnh đóng, `tradeBalance` trong Redis phải được đồng bộ lại từ MongoDB.
+> `tradeBalance` trong Redis chỉ là **bản copy**. Số tiền thật luôn nằm ở MongoDB.
 
 ---
 
-### 2.2 Active Positions (Vị thế đang mở)
+### 3.2 Vị thế đang mở — `positions:active:{wallet}`
 
 ```
-KEY:    positions:active:{walletAddress}
-TYPE:   Hash
+KEY:  positions:active:0xABC...
+TYPE: Hash
 ```
 
-| Field          | Value                               |
-| -------------- | ----------------------------------- |
-| `{positionId}` | `JSON.stringify(PositionRedisData)` |
+Mỗi field là 1 vị thế:
 
-```typescript
-interface PositionRedisData {
-  id: string;
-  symbol: string;
-  side: 'long' | 'short';
-  type: 'market' | 'limit';
-  qty: number;
-  entryPrice: number;
-  leverage: number;
-  sl?: number | null;
-  tp?: number | null;
-  openFee: number;
+```
+FIELD: "pos_12345"
+VALUE: {
+  "symbol": "BTC-USDT",
+  "side": "long",
+  "qty": 0.01,
+  "entryPrice": 95000,
+  "leverage": 10,
+  "sl": 94000,
+  "tp": 100000,
 
-  // Tính toán bởi Go Engine (cập nhật real-time)
-  markPrice: number; // Giá mark hiện tại
-  unrealizedPnL: number; // uPnL = (markPrice - entryPrice) * qty * side_multiplier
-  initialMargin: number; // IM = (qty * entryPrice) / leverage
-  maintenanceMargin: number; // MM = notionalValue * MMR
-  liquidationPrice: number; // Giá thanh lý (tính bởi engine)
-
-  createdAt: string; // ISO timestamp
-  updatedAt: string; // ISO timestamp - Go engine cập nhật
+  // Go Engine tự cập nhật:
+  "markPrice": 96000,
+  "unrealizedPnL": 10,
+  "initialMargin": 95,        // = (0.01 * 95000) / 10
+  "maintenanceMargin": 3.84,  // = notional * MMR
+  "liquidationPrice": 5200
 }
 ```
 
 ---
 
-### 2.3 Pending Orders (Lệnh chờ khớp)
+### 3.3 Lệnh Limit chờ khớp — `orders:pending:{wallet}`
 
 ```
-KEY:    orders:pending:{walletAddress}
-TYPE:   Hash
+KEY:  orders:pending:0xABC...
+TYPE: Hash
 ```
 
-| Field       | Value                                   |
-| ----------- | --------------------------------------- |
-| `{orderId}` | `JSON.stringify(PendingOrderRedisData)` |
-
-```typescript
-interface PendingOrderRedisData {
-  id: string;
-  symbol: string;
-  side: 'long' | 'short';
-  type: 'limit';
-  qty: number;
-  entryPrice: number; // Giá đặt limit
-  leverage: number;
-  sl?: number | null;
-  tp?: number | null;
-
-  // Ký quỹ dự phòng cho lệnh limit
-  reservedMargin: number; // (qty * entryPrice) / leverage + estimated open fee
-
-  createdAt: string;
+```
+FIELD: "ord_67890"
+VALUE: {
+  "symbol": "ETH-USDT",
+  "side": "short",
+  "qty": 1,
+  "entryPrice": 4000,
+  "leverage": 5,
+  "reservedMargin": 800   // = (1 * 4000) / 5 → đặt cọc trước
 }
 ```
 
 > [!WARNING]
-> **Lệnh Limit chờ khớp phải "đặt cọc" margin** (`reservedMargin`).
-> Nếu không tính phần này, user có thể đặt vô hạn lệnh limit mà không đủ vốn.
-> `Available Balance = Trade Balance + Total uPnL - Total IM - Total Reserved Margin`
+> Lệnh Limit **phải đặt cọc trước** (`reservedMargin`). Nếu không, user có thể spam vô hạn lệnh mà không đủ tiền.
 
 ---
 
-### 2.4 Market Tickers (đã có)
+### 3.4 SL/TP trigger — Sorted Set (cho Go Engine tra nhanh)
 
 ```
-KEY:    market:tickers
-TYPE:   Hash
-FIELD:  BTC-USDT
-VALUE:  JSON.stringify({ last, bidPx, askPx, timestamp, ... })
+KEY:   sl:triggers:BTC-USDT       // Cắt lỗ
+TYPE:  Sorted Set
+SCORE: giá trigger (VD: 94000)
+MEMBER: "0xABC:pos_12345"
 ```
 
----
-
-### 2.5 Tổng quan Key Map
+Thay vì scan toàn bộ, Go Engine chỉ cần query theo khoảng giá:
 
 ```
-account:{wallet}                → Hash (tổng hợp tài khoản)
-positions:active:{wallet}       → Hash (các vị thế đang mở)
-orders:pending:{wallet}         → Hash (lệnh limit chờ khớp)
-market:tickers                  → Hash (giá thị trường)
-lock:position:{wallet}          → String + NX (distributed lock)
+ZRANGEBYSCORE sl:triggers:BTC-USDT -inf 94500   → tìm SL cần kích hoạt
+ZRANGEBYSCORE tp:triggers:BTC-USDT 100000 +inf   → tìm TP cần kích hoạt
 ```
 
 ---
 
-## 3. Luồng dữ liệu khi vào lệnh
+### 3.5 Tổng hợp tất cả key Redis
 
-### 3.1 Market Order (Khớp ngay)
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant NestJS as NestJS API
-    participant MongoDB
-    participant Redis
-    participant GoEngine as Go Engine
-
-    User->>NestJS: POST /orders/market
-    NestJS->>NestJS: Verify signature + Nonce
-    NestJS->>NestJS: Validate symbol, params, SL/TP
-    NestJS->>Redis: GET market:tickers → lấy giá hiện tại
-
-    Note over NestJS: Kiểm tra đủ margin (xem mục 3.3)
-
-    NestJS->>MongoDB: Trừ openFee vào tradeBalance
-    NestJS->>MongoDB: Create position (status: open)
-    NestJS->>Redis: HSET positions:active:{wallet} {posId} {data}
-    NestJS->>Redis: Cập nhật account:{wallet} (recalculate)
-
-    Note over GoEngine: Go Engine đọc Redis liên tục
-    GoEngine->>Redis: Monitor positions + market prices
-    GoEngine->>Redis: Cập nhật uPnL, equity, marginBuffer
+```
+account:{wallet}                → Tổng hợp tài khoản
+positions:active:{wallet}       → Các vị thế đang mở
+orders:pending:{wallet}         → Lệnh limit đang chờ
+market:tickers                  → Giá thị trường (đã có sẵn)
+lock:position:{wallet}          → Khóa chống race condition
+sl:triggers:{symbol}            → SL trigger (Sorted Set)
+tp:triggers:{symbol}            → TP trigger (Sorted Set)
 ```
 
-### 3.2 Limit Order (Chờ khớp)
+---
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant NestJS as NestJS API
-    participant MongoDB
-    participant Redis
-    participant GoEngine as Go Engine
+## 4. Khi chưa có lệnh nào → Không cần Redis
 
-    User->>NestJS: POST /orders/limit
-    NestJS->>NestJS: Verify + Validate
+Khi user không có vị thế nào đang mở:
 
-    Note over NestJS: Kiểm tra đủ margin cho reservedMargin
+- Unrealized PnL = 0
+- Equity = Trade Balance (lấy thẳng từ MongoDB)
+- Margin Buffer = Trade Balance
 
-    NestJS->>MongoDB: Create position (status: pending)
-    NestJS->>Redis: HSET orders:pending:{wallet} {ordId} {data}
-    NestJS->>Redis: Cập nhật account:{wallet}.totalReservedMargin
+→ **Không cần tạo key nào trong Redis cả.**
 
-    Note over GoEngine: Khi giá khớp limit price
-    GoEngine->>Redis: Chuyển từ orders:pending → positions:active
-    GoEngine->>Redis: Cập nhật account summary
-    GoEngine->>MongoDB: Update position status: open
+### Lệnh đầu tiên xử lý thế nào?
+
+```
+1. User mở lệnh
+2. NestJS kiểm tra Redis → Không có account:{wallet}
+3. NestJS lấy tradeBalance từ MongoDB
+4. Kiểm tra: tradeBalance >= margin cần + phí?
+   → Có: tạo position + khởi tạo Redis keys
+   → Không: từ chối lệnh
+5. Go Engine bắt đầu monitor
 ```
 
-### 3.3 Pre-order Margin Check
+### Khi nào xóa Redis?
 
-Trước khi cho phép mở lệnh mới, NestJS phải kiểm tra:
+Khi **đóng hết tất cả vị thế VÀ không còn lệnh pending** → xóa sạch 3 key:
+
+```
+DEL account:{wallet}
+DEL positions:active:{wallet}
+DEL orders:pending:{wallet}
+```
+
+---
+
+## 5. Go Engine cập nhật Redis như nào?
+
+**Mỗi khi có tick giá mới**, Go Engine:
+
+1. Nhận giá mới (ví dụ BTC-USDT nhảy từ 95000 → 95100)
+2. Tìm tất cả wallet đang có vị thế BTC-USDT
+3. Tính lại uPnL, Equity, Margin Ratio **trong RAM của Go** (cực nhanh)
+4. Ghi kết quả mới vào Redis
+5. Bắn Pub/Sub để NestJS đẩy về frontend qua WebSocket
+
+**Tối ưu hiệu năng:**
+
+- **Pipelining**: Gom nhiều lệnh Redis thành 1 batch, gửi 1 lần
+- **Throttle**: Tối đa 5-10 lần/giây/user (không cần cập nhật UI mỗi ms)
+- **Selective**: Chỉ cập nhật Redis khi giá trị thay đổi đáng kể (> 0.1%)
+
+---
+
+## 6. Các vấn đề & giải pháp
+
+### 6.1 🔒 Race Condition (Mở 2 lệnh cùng lúc)
+
+**Vấn đề**: User gửi 2 lệnh đồng thời, cả 2 đều check "đủ tiền" → nhưng tổng lại thì không đủ.
+
+**Giải pháp**: Dùng **Distributed Lock**. Mỗi lần mở/đóng/sửa lệnh phải "giành quyền" trước:
 
 ```typescript
-// Giả sử mở lệnh mới:
-const newOrderNotional = qty * entryPrice;
-const requiredIM = newOrderNotional / leverage;
-const estimatedOpenFee = newOrderNotional * pair.openFeeRate;
-const totalRequired = requiredIM + estimatedOpenFee;
+const lockKey = `lock:position:${wallet}`;
+const acquired = await redis.set(lockKey, uuid(), 'NX', 'EX', 5);
+// NX = chỉ set nếu chưa tồn tại
+// EX = tự expire sau 5 giây (tránh deadlock)
 
-// Lấy dữ liệu từ Redis (hoặc tính từ MongoDB nếu cold start)
-const account = await redis.hgetall(`account:${walletAddress}`);
-
-const availableBalance =
-  parseFloat(account.tradeBalance) +
-  parseFloat(account.totalUnrealizedPnL) -
-  parseFloat(account.totalInitialMargin) -
-  parseFloat(account.totalReservedMargin ?? '0');
-
-if (availableBalance < totalRequired) {
-  throw new BadRequestException('Không đủ margin để mở lệnh');
-}
+if (!acquired) throw new Error('Đang xử lý lệnh khác, thử lại sau');
 ```
 
 ---
 
-## 4. Cold Start: Khi chưa có lệnh nào
+### 6.2 🔄 Redis và MongoDB mất đồng bộ
 
-### 4.1 Câu hỏi: Có cần lưu dữ liệu trong Redis khi không có lệnh?
+**Vấn đề**: MongoDB ghi OK nhưng Redis chưa kịp cập nhật.
 
-**Trả lời: KHÔNG cần.** Khi user không có vị thế nào đang mở:
+**3 lớp bảo vệ:**
 
-- `Unrealized PnL = 0`
-- `Total Initial Margin = 0`
-- `Total Maintenance Margin = 0`
-- `Total Equity = tradeBalance` (chính là giá trị trong MongoDB)
-- `Margin Buffer = tradeBalance` (toàn bộ số dư đều khả dụng)
-
-→ Mọi thông tin cần thiết đều lấy được trực tiếp từ MongoDB (`wallet.tradeBalance`).
-
-### 4.2 Luồng cho lệnh đầu tiên
-
-```mermaid
-flowchart TD
-    A[User mở lệnh đầu tiên] --> B{Redis có<br>account:wallet?}
-    B -->|Không| C[Lấy tradeBalance từ MongoDB]
-    C --> D[Tính available = tradeBalance]
-    D --> E{available >= requiredIM + fee?}
-    E -->|Có| F[Tạo position trong MongoDB]
-    F --> G[Khởi tạo account:wallet trong Redis]
-    G --> H[Thêm position vào positions:active:wallet]
-    H --> I[Go Engine bắt đầu monitor]
-    E -->|Không| J[Reject: Insufficient margin]
-
-    B -->|Có| K[Lấy data từ Redis account]
-    K --> E
-```
-
-### 4.3 Khi nào xóa dữ liệu trong Redis?
-
-```
-Khi vị thế cuối cùng đóng AND không còn lệnh pending nào:
-  → DEL account:{wallet}
-  → DEL positions:active:{wallet}
-  → DEL orders:pending:{wallet}
-```
-
-Điều này giữ Redis "sạch" và tránh lưu dữ liệu thừa cho user không active.
+| Lớp | Cơ chế                                                             | Khi nào chạy?        |
+| --- | ------------------------------------------------------------------ | -------------------- |
+| 1   | **Write-through**: Ghi MongoDB → ghi Redis. Nếu Redis fail → retry | Mỗi thao tác         |
+| 2   | **Sync-on-startup**: Rebuild Redis từ MongoDB                      | Khi server khởi động |
+| 3   | **Periodic check**: So sánh Redis vs MongoDB, sửa nếu lệch         | Mỗi 30 giây          |
 
 ---
 
-## 5. Vấn đề, Rủi ro & Giải pháp
+### 6.3 💥 Redis Crash
 
-### 5.1 Race Condition khi mở nhiều lệnh đồng thời
+**Vấn đề**: Redis restart → mất hết dữ liệu.
 
-|               | Chi tiết                                                                                                                                     |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Vấn đề**    | User gửi 2 lệnh Market cùng lúc. Cả hai đều check margin và thấy "đủ", nhưng tổng lại thì không đủ.                                          |
-| **Rủi ro**    | Over-leveraged, tài khoản âm, mất vốn sàn.                                                                                                   |
-| **Giải pháp** | Sử dụng **Distributed Lock** trên Redis: `SET lock:position:{wallet} {uuid} NX EX 5`. Mỗi thao tác mở/đóng/sửa lệnh phải acquire lock trước. |
+**Giải pháp:**
 
-```typescript
-// Redis Lock Pattern
-const lockKey = `lock:position:${walletAddress}`;
-const lockId = uuid();
-const acquired = await redis.set(lockKey, lockId, 'NX', 'EX', 5);
-if (!acquired) throw new ConflictException('Đang xử lý lệnh khác');
-
-try {
-  // ... xử lý mở lệnh
-} finally {
-  // Chỉ xóa nếu lock vẫn là của mình (tránh xóa lock người khác)
-  const script = `
-    if redis.call("get", KEYS[1]) == ARGV[1] then
-      return redis.call("del", KEYS[1])
-    else
-      return 0
-    end
-  `;
-  await redis.eval(script, 1, lockKey, lockId);
-}
-```
+1. Bật **AOF** (ghi log mỗi giây) → mất tối đa 1 giây data
+2. Khi Go Engine thấy Redis trống → tự động rebuild từ MongoDB
+3. Go Engine ping Redis mỗi giây, mất kết nối → freeze mọi thao tác
 
 ---
 
-### 5.2 Redis và MongoDB mất đồng bộ (Data Drift)
+### 6.4 ⚡ Thanh lý (Liquidation)
 
-|               | Chi tiết                                                                                        |
-| ------------- | ----------------------------------------------------------------------------------------------- |
-| **Vấn đề**    | MongoDB ghi thành công nhưng Redis chưa kịp cập nhật (hoặc ngược lại).                          |
-| **Rủi ro**    | User thấy equity sai, hoặc engine tính sai margin → thanh lý nhầm hoặc cho mở lệnh vượt margin. |
-| **Giải pháp** |                                                                                                 |
-
-1. **Write-through**: Ghi MongoDB trước, sau đó ghi Redis. Nếu Redis fail → đánh dấu "dirty" và retry.
-2. **Sync-on-startup**: Khi NestJS hoặc Go Engine khởi động, quét MongoDB lấy tất cả `status: 'open' | 'pending'` và rebuild Redis.
-3. **Periodic Reconciliation**: Chạy cronjob mỗi 30 giây so sánh Redis vs MongoDB. Nếu lệch → sync lại.
-
-```typescript
-// Sync-on-startup pattern
-async function syncPositionsToRedis() {
-  const openPositions = await PositionModel.find({
-    status: { $in: ['open', 'pending'] },
-  });
-
-  // Group by walletAddress
-  const grouped = groupBy(openPositions, 'walletAddress');
-
-  for (const [wallet, positions] of Object.entries(grouped)) {
-    const walletData = await WalletModel.findOne({ walletAddress: wallet });
-
-    // Rebuild active positions
-    const pipeline = redis.pipeline();
-    pipeline.del(`positions:active:${wallet}`);
-    pipeline.del(`orders:pending:${wallet}`);
-
-    for (const pos of positions) {
-      if (pos.status === 'open') {
-        pipeline.hset(
-          `positions:active:${wallet}`,
-          pos._id,
-          JSON.stringify(pos),
-        );
-      } else {
-        pipeline.hset(`orders:pending:${wallet}`, pos._id, JSON.stringify(pos));
-      }
-    }
-
-    // Rebuild account summary
-    pipeline.hset(`account:${wallet}`, {
-      tradeBalance: walletData.tradeBalance.toString(),
-      positionCount: positions
-        .filter((p) => p.status === 'open')
-        .length.toString(),
-      // ...engine sẽ tính lại uPnL
-    });
-
-    await pipeline.exec();
-  }
-}
-```
-
----
-
-### 5.3 Redis Crash / Restart
-
-|               | Chi tiết                                                                 |
-| ------------- | ------------------------------------------------------------------------ |
-| **Vấn đề**    | Redis bị restart → mất toàn bộ dữ liệu in-memory.                        |
-| **Rủi ro**    | Go Engine không biết có vị thế nào → không monitor → không thanh lý kịp. |
-| **Giải pháp** |                                                                          |
-
-1. **Redis Persistence**: Bật AOF (Append Only File) với `appendfsync everysec` để chấp nhận tối đa mất 1 giây data.
-2. **Sync-on-startup** (như trên): Khi Go Engine detect Redis trống → trigger full sync.
-3. **Health Check**: Go Engine ping Redis mỗi 1 giây. Nếu mất kết nối → cảnh báo + freeze all operations.
-
----
-
-### 5.4 Thanh lý (Liquidation) trong Cross-Margin
-
-|               | Chi tiết                                                                 |
-| ------------- | ------------------------------------------------------------------------ |
-| **Vấn đề**    | Khi `marginRatio >= 1` (tức `MM >= Equity`), tài khoản phải bị thanh lý. |
-| **Rủi ro**    | Thanh lý chậm → tài khoản âm → sàn chịu lỗ. Thanh lý nhầm → mất uy tín.  |
-| **Giải pháp** |                                                                          |
+**Khi nào thanh lý?** Khi `Maintenance Margin ≥ Total Equity` (margin ratio ≥ 1).
 
 ```
-Liquidation Flow (Go Engine):
-
-1. Mỗi tick giá → tính lại uPnL cho tất cả vị thế
-2. Tính totalEquity = tradeBalance + Σ(uPnL)
-3. Tính totalMM = Σ(notionalValue * MMR) cho từng vị thế
-4. marginRatio = totalMM / totalEquity
-5. Nếu marginRatio >= WARNING_THRESHOLD (e.g., 0.8):
-   → Pub/Sub thông báo client
-6. Nếu marginRatio >= 1.0:
-   → Thanh lý theo thứ tự: vị thế lỗ nhiều nhất trước
-   → Cập nhật Redis + MongoDB
-   → Thông báo client qua WebSocket
+Go Engine mỗi tick giá:
+  1. Tính lại equity cho tất cả tài khoản
+  2. marginRatio >= 0.8 → CẢNH BÁO (gửi WebSocket)
+  3. marginRatio >= 1.0 → THANH LÝ (đóng vị thế lỗ nhất trước)
 ```
 
 > [!CAUTION]
-> **Maintenance Margin Rate (MMR)** nên được cấu hình theo tiers (bậc thang) dựa trên notional value.
-> Ví dụ: Tier 1 (0-10K USD) → MMR 0.5%, Tier 2 (10K-100K) → MMR 1%, v.v.
 > Hiện tại `Pair` chưa có field `maintenanceMarginRate`. Cần thêm vào.
+> Nên thiết kế theo tiers: notional nhỏ → MMR thấp, notional lớn → MMR cao.
 
 ---
 
-### 5.5 Precision & Rounding Errors
+### 6.5 🔢 Sai số thập phân
 
-|               | Chi tiết                                                              |
-| ------------- | --------------------------------------------------------------------- |
-| **Vấn đề**    | Floating point errors tích lũy qua nhiều lần tính → `0.1 + 0.2 ≠ 0.3` |
-| **Rủi ro**    | Sai lệch nhỏ nhưng tích lũy → equity/margin tính sai → thanh lý nhầm. |
-| **Giải pháp** |                                                                       |
+**Vấn đề**: `0.1 + 0.2 = 0.30000000000000004` (JavaScript/floating point).
 
-1. Sử dụng **string-based number** trong Redis (đã áp dụng ở thiết kế trên)
-2. Go Engine nên dùng thư viện **arbitrary precision** (ví dụ `shopspring/decimal` trong Go)
-3. Tất cả PnL/fee phải round qua `BALANCE_CONFIG.PRECISION` trước khi ghi vào MongoDB
-4. Redis chỉ lưu kết quả đã round, không lưu số raw
+**Giải pháp:**
+
+- Redis lưu số dạng **string** (tránh mất precision)
+- Go Engine dùng thư viện `shopspring/decimal` (tính chính xác)
+- Luôn round về `BALANCE_CONFIG.PRECISION` trước khi ghi MongoDB
 
 ---
 
-### 5.6 Order Flood / Spam Protection
+### 6.6 🛡️ Chống spam lệnh
 
-|               | Chi tiết                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| **Vấn đề**    | User spam mở hàng trăm lệnh limit để exhaust tài nguyên Redis/MongoDB. |
-| **Rủi ro**    | Tốn memory Redis, chậm tính toán, DoS.                                 |
-| **Giải pháp** |                                                                        |
+| Giới hạn                | Giá trị gợi ý |
+| ----------------------- | ------------- |
+| Max lệnh pending / user | 20            |
+| Max vị thế open / user  | 50            |
+| Max lệnh / giây / user  | 5             |
 
-1. **Giới hạn số lệnh pending**: Max 20 lệnh pending/user
-2. **Giới hạn số vị thế open**: Max 50 vị thế open/user
-3. **Rate limiting**: Max 5 lệnh/giây/user
-4. Kiểm tra trong Redis (nhanh hơn DB):
-   ```
-   HLEN orders:pending:{wallet} < MAX_PENDING_ORDERS
-   HLEN positions:active:{wallet} < MAX_ACTIVE_POSITIONS
-   ```
+Check nhanh trong Redis:
+
+```
+HLEN orders:pending:{wallet} < 20
+HLEN positions:active:{wallet} < 50
+```
 
 ---
 
-### 5.7 Funding Rate Chi Phí Nắm Giữ
+### 6.7 📊 Funding Rate (nâng cao, triển khai sau)
 
-|               | Chi tiết                                                               |
-| ------------- | ---------------------------------------------------------------------- |
-| **Vấn đề**    | Perpetual futures cần funding rate để giữ giá hợp đồng gần spot price. |
-| **Rủi ro**    | Nếu không tính funding → giá contract và giá spot chênh lệch lớn.      |
-| **Giải pháp** |                                                                        |
+Perpetual futures cần funding rate để giữ giá hợp đồng gần giá spot.
 
-1. Go Engine tính và áp dụng funding rate mỗi 8 giờ (hoặc 1 giờ)
-2. Funding = PositionValue × FundingRate (dương hoặc âm)
-3. Cộng/trừ vào `tradeBalance` trong cả Redis và MongoDB
-4. **Nên lưu lịch sử funding** trong MongoDB để audit
-
-> [!NOTE]
-> Funding rate là feature nâng cao, có thể triển khai sau.
-> Tuy nhiên cần **thiết kế sẵn field** trong Redis để Go Engine dễ cập nhật.
+- Go Engine tính mỗi 8 giờ
+- Funding = Giá trị vị thế × Funding Rate
+- Cộng/trừ thẳng vào `tradeBalance`
+- Lưu lịch sử vào MongoDB
 
 ---
 
-### 5.8 Partial Close và Impact lên Cross-Margin
+### 6.8 🧩 Đóng lệnh một phần (Partial Close)
 
-|               | Chi tiết                                                                                              |
-| ------------- | ----------------------------------------------------------------------------------------------------- |
-| **Vấn đề**    | Đóng một phần vị thế → PnL realized → `tradeBalance` thay đổi → ảnh hưởng toàn bộ margin calculation. |
-| **Rủi ro**    | Nếu cập nhật không atomic → state inconsistent trong vài ms → engine có thể thanh lý nhầm.            |
-| **Giải pháp** | Sử dụng **Redis Lua Script** để cập nhật atomic nhiều key cùng lúc:                                   |
+**Vấn đề**: Đóng 1 phần → PnL realized → `tradeBalance` đổi → margin ratio của tất cả lệnh khác cũng đổi.
+
+**Giải pháp**: Dùng **Lua Script** để cập nhật **atomic** (tất cả cùng lúc, không có khoảng hở):
 
 ```lua
--- atomic_partial_close.lua
--- KEYS: [1] positions:active:{wallet}, [2] account:{wallet}
--- ARGV: [1] positionId, [2] newQty (JSON), [3] realizedPnL, [4] newTradeBalance
-
--- Cập nhật position
-redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])
-
--- Cập nhật account summary
-redis.call('HSET', KEYS[2], 'tradeBalance', ARGV[4])
-
--- Engine sẽ recalculate phần còn lại
+-- Cập nhật position + account summary cùng 1 lệnh
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[2])  -- position
+redis.call('HSET', KEYS[2], 'tradeBalance', ARGV[3])  -- account
 return 1
 ```
 
 ---
 
-### 5.9 Stop-Loss / Take-Profit Execution
+## 7. Công thức tính toán
 
-|               | Chi tiết                                                                              |
-| ------------- | ------------------------------------------------------------------------------------- |
-| **Vấn đề**    | Go Engine phải kiểm tra SL/TP cho mọi vị thế mỗi tick giá. Số lượng lớn → bottleneck. |
-| **Rủi ro**    | SL/TP bị chậm match → user thua lỗ nhiều hơn dự kiến.                                 |
-| **Giải pháp** |                                                                                       |
-
-1. Lưu SL/TP trong **Sorted Set** theo giá trigger:
-   ```
-   KEY:    sl:triggers:{symbol}
-   TYPE:   Sorted Set
-   SCORE:  triggerPrice (giá SL)
-   MEMBER: {walletAddress}:{positionId}
-   ```
-2. Mỗi tick giá, chỉ query range thay vì scan toàn bộ:
-
-   ```
-   -- Cho Long SL (kích hoạt khi giá <= SL):
-   ZRANGEBYSCORE sl:triggers:BTC-USDT -inf {currentPrice}
-
-   -- Cho Long TP (kích hoạt khi giá >= TP):
-   ZRANGEBYSCORE tp:triggers:BTC-USDT {currentPrice} +inf
-   ```
-
----
-
-## 6. Công thức tính toán
-
-### 6.1 Unrealized PnL (cho từng vị thế)
+### Unrealized PnL (lời/lỗ tạm tính)
 
 ```
-Long:  uPnL = (markPrice - entryPrice) * qty
-Short: uPnL = (entryPrice - markPrice) * qty
+Long:  uPnL = (giá hiện tại - giá vào) × số lượng
+Short: uPnL = (giá vào - giá hiện tại) × số lượng
 ```
 
-> Hiện `math.util.ts` đã có hàm `calculatePnL()` — có thể reuse trong Go Engine.
-
-### 6.2 Initial Margin (IM)
+### Initial Margin (tiền ký quỹ)
 
 ```
-IM = (qty * entryPrice) / leverage
+IM = (số lượng × giá vào) / đòn bẩy
+
+Ví dụ: Mua 0.1 BTC giá 95000, leverage 10x
+IM = (0.1 × 95000) / 10 = 950 USDT
 ```
 
-> Hiện `math.util.ts` đã có hàm `calculateReceivedAmount()` sử dụng cùng công thức.
-
-### 6.3 Maintenance Margin (MM)
+### Available Balance (số dư khả dụng, dùng để mở lệnh mới)
 
 ```
-notionalValue = qty * markPrice
-MM = notionalValue * MMR - maintenanceMarginDeduction
-
-// MMR theo tier (ví dụ):
-// Tier 1: notional 0 - 10,000 USD    → MMR = 0.4%
-// Tier 2: notional 10,000 - 100,000  → MMR = 0.5%
-// Tier 3: notional 100,000+          → MMR = 1.0%
+Available = tradeBalance + tổng uPnL - tổng IM - tổng reserved margin (lệnh pending)
 ```
 
-### 6.4 Total Equity
+### Margin Ratio (tỷ lệ ký quỹ, dùng để kiểm tra thanh lý)
 
 ```
-Total Equity = tradeBalance + Σ(uPnL of all open positions)
+Margin Ratio = tổng Maintenance Margin / Total Equity
+
+>= 1.0 → THANH LÝ
+>= 0.8 → CẢNH BÁO
 ```
 
-### 6.5 Available Balance (cho mở lệnh mới)
+### Liquidation Price (giá thanh lý)
 
 ```
-Available Balance = tradeBalance
-                  + Σ(uPnL)
-                  - Σ(Initial Margin của vị thế đang mở)
-                  - Σ(Reserved Margin của lệnh pending)
-```
-
-### 6.6 Margin Ratio (kiểm tra thanh lý)
-
-```
-Margin Ratio = Σ(Maintenance Margin) / Total Equity
-
-Nếu Margin Ratio >= 1.0 → THANH LÝ
-Nếu Margin Ratio >= 0.8 → CẢNH BÁO (tuỳ cấu hình)
-```
-
-### 6.7 Liquidation Price (Cross-Margin, đơn giản hóa)
-
-```
-// Cho Long:
-Liq Price = entryPrice - (totalEquity - totalMM_others) / qty
-           ≈ entryPrice * (1 - availableMargin / notionalValue)
-
-// Cho Short:
-Liq Price = entryPrice + (totalEquity - totalMM_others) / qty
+Long:  Liq = giá vào - (equity - MM các lệnh khác) / số lượng
+Short: Liq = giá vào + (equity - MM các lệnh khác) / số lượng
 ```
 
 > [!NOTE]
-> Liquidation price trong Cross-Margin **phụ thuộc vào toàn bộ tài khoản**, không chỉ 1 vị thế.
-> Nếu mở thêm/đóng bớt vị thế → liquidation price của tất cả vị thế khác thay đổi theo.
+> Trong Cross-Margin, giá thanh lý **phụ thuộc toàn bộ tài khoản**.
+> Mở thêm/đóng bớt 1 lệnh → giá thanh lý của **tất cả lệnh khác** thay đổi.
 
 ---
 
-## 7. Luồng giao tiếp NestJS ↔ Go Engine
+## 8. NestJS và Go Engine giao tiếp thế nào?
 
-### 7.1 Kênh giao tiếp qua Redis Pub/Sub
+Qua **Redis Pub/Sub** — giống như một "kênh radio" mà 2 bên cùng nghe:
 
-```
-Channel: exodia:position:events
-```
+### NestJS → Go Engine
 
-**NestJS → Go Engine** (Events):
+| Sự kiện            | Khi nào?                   |
+| ------------------ | -------------------------- |
+| `POSITION_OPENED`  | User mở vị thế mới         |
+| `POSITION_UPDATED` | User sửa SL/TP/đóng 1 phần |
+| `POSITION_CLOSED`  | User đóng vị thế           |
+| `ORDER_PLACED`     | User đặt lệnh limit        |
+| `ORDER_CANCELLED`  | User hủy lệnh limit        |
+| `BALANCE_UPDATED`  | User nạp/rút tiền          |
 
-| Event              | Payload                                  | Mô tả                               |
-| ------------------ | ---------------------------------------- | ----------------------------------- |
-| `POSITION_OPENED`  | `{ walletAddress, positionId, ... }`     | Vị thế mới được mở                  |
-| `POSITION_UPDATED` | `{ walletAddress, positionId, changes }` | SL/TP/Qty thay đổi                  |
-| `POSITION_CLOSED`  | `{ walletAddress, positionId }`          | Vị thế đã đóng                      |
-| `ORDER_PLACED`     | `{ walletAddress, orderId, ... }`        | Lệnh limit mới                      |
-| `ORDER_CANCELLED`  | `{ walletAddress, orderId }`             | Lệnh hủy                            |
-| `BALANCE_UPDATED`  | `{ walletAddress, newTradeBalance }`     | Nạp/rút tiền ảnh hưởng tradeBalance |
+### Go Engine → NestJS
 
-**Go Engine → NestJS** (Events):
+| Sự kiện                | Khi nào?                |
+| ---------------------- | ----------------------- |
+| `LIQUIDATION_WARNING`  | Margin ratio >= 0.8     |
+| `LIQUIDATION_EXECUTED` | Đã thanh lý tài khoản   |
+| `ORDER_FILLED`         | Lệnh limit đã khớp      |
+| `SL_TP_TRIGGERED`      | SL hoặc TP đã kích hoạt |
 
-| Event                  | Payload                                      | Mô tả                 |
-| ---------------------- | -------------------------------------------- | --------------------- |
-| `LIQUIDATION_WARNING`  | `{ walletAddress, marginRatio }`             | Cảnh báo sắp thanh lý |
-| `LIQUIDATION_EXECUTED` | `{ walletAddress, positions[] }`             | Đã thanh lý           |
-| `ORDER_FILLED`         | `{ walletAddress, orderId, fillPrice }`      | Lệnh limit khớp       |
-| `SL_TP_TRIGGERED`      | `{ walletAddress, positionId, type, price }` | SL/TP kích hoạt       |
-
-### 7.2 Kiến trúc tổng quan
+### Kiến trúc tổng quan
 
 ```mermaid
 graph LR
-    subgraph Frontend
-        UI[Web App]
-    end
-
-    subgraph NestJS["NestJS API"]
-        PC[Position Controller]
-        PS[Position Service]
-        WS[Wallet Service]
-    end
-
-    subgraph Redis
-        ACC[account:wallet]
-        POS[positions:active:wallet]
-        ORD[orders:pending:wallet]
-        MKT[market:tickers]
-        LOCK[lock:position:wallet]
-        PUBSUB[Pub/Sub Channel]
-    end
-
-    subgraph GoEngine["Go Engine"]
-        MM[Margin Monitor]
-        LIQ[Liquidation Engine]
-        MATCH[Order Matcher]
-        SLTP[SL/TP Checker]
-    end
-
-    subgraph MongoDB
-        WDOC[Wallet Collection]
-        PDOC[Position Collection]
-    end
-
-    UI <-->|WebSocket| PC
-    PC --> PS
-    PS --> WS
-    PS -->|Read/Write| WDOC
-    PS -->|Read/Write| PDOC
-    PS -->|Read/Write| POS
-    PS -->|Read/Write| ORD
-    PS -->|Read/Write| ACC
-    PS -->|Publish| PUBSUB
-
-    GoEngine -->|Subscribe| PUBSUB
-    GoEngine -->|Read/Write| ACC
-    GoEngine -->|Read/Write| POS
-    GoEngine -->|Read| MKT
-    GoEngine -->|Read/Write| ORD
-    GoEngine -->|Publish| PUBSUB
-
-    NestJS -->|Subscribe| PUBSUB
+    UI[Người dùng] <-->|WebSocket| API[NestJS API]
+    API -->|Ghi| DB[(MongoDB)]
+    API <-->|Đọc/Ghi| R[(Redis)]
+    ENGINE[Go Engine] <-->|Đọc/Ghi| R
+    ENGINE -->|Ghi| DB
+    API <-->|Pub/Sub| ENGINE
 ```
 
 ---
 
-## Checklist tóm tắt
+## 9. Checklist
 
-- [ ] Thêm field `maintenanceMarginRate` (hoặc MMR tiers) vào `Pair` type
-- [ ] Implement margin check trước khi mở lệnh (`validateMargin`)
-- [ ] Implement distributed lock cho các operation vào/đóng lệnh
-- [ ] Implement sync-on-startup để rebuild Redis từ MongoDB
-- [ ] Implement Redis Lua script cho atomic updates
+- [ ] Thêm `maintenanceMarginRate` vào `Pair` type
+- [ ] Implement kiểm tra margin trước khi mở lệnh
+- [ ] Implement distributed lock (chống race condition)
+- [ ] Implement sync-on-startup (rebuild Redis từ MongoDB)
+- [ ] Implement Lua script cho atomic updates
 - [ ] Cấu hình Redis AOF persistence
-- [ ] Design Go Engine interfaces (margin monitor, liquidation, SL/TP checker)
-- [ ] Implement reserved margin cho pending limit orders
-- [ ] Implement rate limiting per wallet
-- [ ] Implement position/order count limits per wallet
+- [ ] Implement reserved margin cho lệnh pending
+- [ ] Implement rate limiting + giới hạn số lệnh
 - [ ] Thiết kế SL/TP trigger bằng Sorted Set
-- [ ] Implement Redis Pub/Sub channel cho NestJS ↔ Go Engine
+- [ ] Implement Redis Pub/Sub cho NestJS ↔ Go Engine
+- [ ] Design Go Engine (margin monitor, liquidation, SL/TP checker)
 
 ---
 
-_Ghi chú cuối: Tài liệu này là bản thiết kế ban đầu. Các con số (MMR tiers, rate limits, max positions) cần được fine-tune theo phân tích rủi ro thực tế của sàn._
+_MongoDB luôn là source of truth. Redis có thể bị xóa và rebuild lại bất cứ lúc nào._
