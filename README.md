@@ -1,10 +1,10 @@
-# ⚔️ Exodia Core
+# ⚔️ exodia-core
 
 **Backend API cho sàn giao dịch web3 phái sinh (Web3 Perpetual Exchange).**
 
-Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng vai trò cầu nối giữa giao diện người dùng và hệ thống xử lý giao dịch. Exodia Core chịu trách nhiệm nhận lệnh từ frontend, xác thực chữ ký EIP-712, kiểm tra margin, quản lý ví, và đồng bộ dữ liệu real-time với Exodia Engine thông qua Redis.
+exodia-core là lớp API trung tâm được xây dựng bằng NestJS, đóng vai trò cầu nối giữa giao diện người dùng và hệ thống xử lý giao dịch. exodia-core chịu trách nhiệm nhận lệnh từ frontend, xác thực chữ ký EIP-712, kiểm tra margin, quản lý ví, và đồng bộ dữ liệu real-time với exodia-engine thông qua Redis.
 
-> **Đây là 1 trong 4 thành phần** chính của Exodia. README này tập trung vào **Exodia Core**.
+> **Đây là 1 trong 4 thành phần** chính của Exodia. README này tập trung vào **exodia-core**.
 
 ---
 
@@ -12,7 +12,7 @@ Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng 
 
 - [Cấu Trúc Dự Án Exodia](#-cấu-trúc-dự-án-exodia)
 - [Kiến Trúc Tổng Quan](#-kiến-trúc-tổng-quan)
-- [Vai Trò Của Exodia Core](#-vai-trò-của-exodia-core)
+- [Vai Trò Của exodia-core](#-vai-trò-của-exodia-core)
 - [Công Nghệ Sử Dụng](#-công-nghệ-sử-dụng)
 - [Yêu Cầu Hệ Thống](#-yêu-cầu-hệ-thống)
 - [Cài Đặt & Chạy](#-cài-đặt--chạy)
@@ -30,10 +30,10 @@ Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng 
 
 | Repository                                                           | Công nghệ | Vai trò                                                                    |
 | -------------------------------------------------------------------- | --------- | -------------------------------------------------------------------------- |
-| [**Exodia UI**](https://github.com/anotherath/exodia-ui)             | Next.js   | Giao diện người dùng — hiển thị biểu đồ, đặt lệnh, quản lý ví              |
-| [**Exodia Core**](https://github.com/anotherath/exodia-core)         | NestJS    | API Backend — xác thực, quản lý lệnh, kết nối DB _(repo hiện tại)_         |
-| [**Exodia Engine**](https://github.com/anotherath/exodia-engine)     | Go        | Trading Engine — khớp lệnh, tính PnL, quét thanh lý, gom state root        |
-| [**Exodia Contract**](https://github.com/anotherath/exodia-contract) | Solidity  | Smart Contracts trên Ethereum — nạp/rút tiền, staking, xác thực state root |
+| [**exodia-ui**](https://github.com/anotherath/exodia-ui)             | Next.js   | Giao diện người dùng — hiển thị biểu đồ, đặt lệnh, quản lý ví              |
+| [**exodia-core**](https://github.com/anotherath/exodia-core)         | NestJS    | API Backend — xác thực, quản lý lệnh, kết nối DB _(repo hiện tại)_         |
+| [**exodia-engine**](https://github.com/anotherath/exodia-engine)     | Go        | Trading Engine — khớp lệnh, tính PnL, quét thanh lý, gom state root        |
+| [**exodia-contract**](https://github.com/anotherath/exodia-contract) | Solidity  | Smart Contracts trên Ethereum — nạp/rút tiền, staking, xác thực state root |
 
 ---
 
@@ -41,10 +41,10 @@ Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng 
 
 ```mermaid
 graph LR
-    UI[Exodia UI<br/>Next.js] <-->|REST / WebSocket| CORE[Exodia Core<br/>NestJS]
+    UI[exodia-ui<br/>Next.js] <-->|REST / WebSocket| CORE[exodia-core<br/>NestJS]
     CORE -->|Đọc/Ghi| DB[(MongoDB)]
     CORE <-->|Đọc/Ghi| REDIS[(Redis)]
-    ENGINE[Exodia Engine<br/>Go] -->|Đọc/Ghi| DB
+    ENGINE[exodia-engine<br/>Go] -->|Đọc/Ghi| DB
     ENGINE <-->|Đọc/Ghi| REDIS
     CORE <-.->|Pub/Sub qua Redis| ENGINE
     ENGINE <-->|Events / State Root| BC[Blockchain<br/>Ethereum]
@@ -54,28 +54,28 @@ graph LR
 
 ```
 📥 Nạp tiền:
-   User → Exodia Contract (deposit) → Blockchain Event
-   → Exodia Engine lắng nghe → Cập nhật MongoDB & Redis → Exodia Core phản ánh số dư mới
+   User → exodia-contract (deposit) → Blockchain Event
+   → exodia-engine lắng nghe → Cập nhật MongoDB & Redis → exodia-core phản ánh số dư mới
 
 📤 Rút tiền:
-   User → Exodia Core (yêu cầu rút) → Exodia Engine gom vào State Root
-   → Exodia Engine đẩy State Root lên Blockchain (định kỳ)
-   → Exodia Contract xác thực → Cho phép rút
+   User → exodia-core (yêu cầu rút) → exodia-engine gom vào State Root
+   → exodia-engine đẩy State Root lên Blockchain (định kỳ)
+   → exodia-contract xác thực → Cho phép rút
 
 📈 Mở lệnh Market:
-   User ký EIP-712 → Exodia UI gửi đến Exodia Core → Exodia Core xác thực & validate margin
-   → Exodia Core ghi MongoDB + đồng bộ Redis → Exodia Engine nhận event → Theo dõi PnL
+   User ký EIP-712 → exodia-ui gửi đến exodia-core → exodia-core xác thực & validate margin
+   → exodia-core ghi MongoDB + đồng bộ Redis → exodia-engine nhận event → Theo dõi PnL
 
 📊 Dữ liệu Real-time:
-   Exodia Engine tính PnL/Margin liên tục → Ghi vào Redis
-   → Exodia Core đọc Redis khi cần → Trả về cho Exodia UI qua REST/WebSocket
+   exodia-engine tính PnL/Margin liên tục → Ghi vào Redis
+   → exodia-core đọc Redis khi cần → Trả về cho exodia-ui qua REST/WebSocket
 ```
 
 ---
 
-## 🎯 Vai Trò Của Exodia Core
+## 🎯 Vai Trò Của exodia-core
 
-Exodia Core là **API Gateway** — lớp trung gian xử lý mọi tương tác giữa người dùng và hệ thống:
+exodia-core là **API Gateway** — lớp trung gian xử lý mọi tương tác giữa người dùng và hệ thống:
 
 | Trách nhiệm                     | Chi tiết                                                             |
 | ------------------------------- | -------------------------------------------------------------------- |
@@ -85,16 +85,16 @@ Exodia Core là **API Gateway** — lớp trung gian xử lý mọi tương tác
 | **Quản lý vị thế**              | Theo dõi, cập nhật SL/TP, đóng vị thế                                |
 | **Quản lý ví**                  | Truy vấn số dư, chuyển tiền giữa Main Wallet ↔ Trade Balance         |
 | **Cung cấp dữ liệu thị trường** | Cache & phục vụ dữ liệu nến từ OKX                                   |
-| **Đồng bộ Redis**               | Ghi vị thế/lệnh mới lên Redis để Exodia Engine xử lý real-time       |
+| **Đồng bộ Redis**               | Ghi vị thế/lệnh mới lên Redis để exodia-engine xử lý real-time       |
 | **Rate Limiting**               | Chặn spam API theo 2 lớp (IP + Wallet)                               |
 
-### Exodia Core KHÔNG làm:
+### exodia-core KHÔNG làm:
 
-- ❌ Khớp lệnh Limit (Exodia Engine làm)
-- ❌ Tính PnL real-time (Exodia Engine làm)
-- ❌ Quét thanh lý (Exodia Engine làm)
-- ❌ Gom state root (Exodia Engine làm)
-- ❌ Xử lý nạp/rút on-chain (Exodia Contract làm)
+- ❌ Khớp lệnh Limit (exodia-engine làm)
+- ❌ Tính PnL real-time (exodia-engine làm)
+- ❌ Quét thanh lý (exodia-engine làm)
+- ❌ Gom state root (exodia-engine làm)
+- ❌ Xử lý nạp/rút on-chain (exodia-contract làm)
 
 ---
 
@@ -283,7 +283,7 @@ Khung nến hỗ trợ: `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1D`, `1W`, `1M`
 | `POST` | `/wallet/deposit-trade`                 | Chuyển tiền từ Main Wallet → Trade Balance |
 | `POST` | `/wallet/withdraw-trade`                | Chuyển tiền từ Trade Balance → Main Wallet |
 
-> **Lưu ý:** Deposit/Withdraw ở đây là chuyển **nội bộ** giữa Main Wallet và Trade Balance, không phải nạp/rút on-chain. Việc nạp/rút on-chain được xử lý bởi Exodia Contract trên Ethereum.
+> **Lưu ý:** Deposit/Withdraw ở đây là chuyển **nội bộ** giữa Main Wallet và Trade Balance, không phải nạp/rút on-chain. Việc nạp/rút on-chain được xử lý bởi exodia-contract trên Ethereum.
 
 ---
 
@@ -463,7 +463,7 @@ Exodia **không dùng JWT hay session**. Mỗi hành động giao dịch đượ
 1. User gọi /nonce/get-nonce      → Nhận mã nonce (hết hạn sau 2 phút)
 2. Frontend tạo bản tin EIP-712    → Chứa nonce + thông tin giao dịch
 3. User ký bằng ví                 → MetaMask / WalletConnect / ...
-4. Exodia Core xác thực chữ ký (viem) → Đúng người, đúng nội dung
+4. exodia-core xác thực chữ ký (viem) → Đúng người, đúng nội dung
 5. Nonce bị xóa ngay              → Không thể replay
 ```
 
