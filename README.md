@@ -178,38 +178,6 @@ Tại đây có thể xem và thử tất cả API trực tiếp.
 
 ---
 
-## 🔐 Biến Môi Trường
-
-Tạo file `.env` tại thư mục gốc bằng cách copy từ file [`.env.example`](.env.example). File `.env` chứa các thông tin nhạy cảm nên đã được cấu hình trong `.gitignore` để không bị đẩy lên GitHub.
-
-```env
-# --- CẤU HÌNH DỰ ÁN ---
-PROJECT_NAME=exodia
-NETWORK_NAME=exodia-network
-
-# --- MONGODB ---
-# LƯU Ý: Tuyệt đối không để lộ mật khẩu thật tại đây nếu đẩy lên public repo
-MONGO_IMAGE=mongo:latest
-MONGO_CONTAINER_NAME=exodia-mongodb
-MONGO_PORT=27017
-MONGO_ROOT_USER=admin
-MONGO_ROOT_PASSWORD=password123
-MONGO_DB_NAME=exodia-database
-
-# URI kết nối (lưu ý khớp với username/password ở trên)
-MONGODB_URI=mongodb://admin:password123@localhost:27017/exodia-database?authSource=admin
-
-# --- REDIS ---
-REDIS_IMAGE=redis:alpine
-REDIS_CONTAINER_NAME=exodia-redis
-REDIS_PORT=6379
-REDIS_HOST=127.0.0.1
-
-# --- APP ---
-PORT=3000
-```
-
----
 
 ## 📂 Cấu Trúc Thư Mục
 
