@@ -16,7 +16,6 @@ Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng 
 - [Công Nghệ Sử Dụng](#-công-nghệ-sử-dụng)
 - [Yêu Cầu Hệ Thống](#-yêu-cầu-hệ-thống)
 - [Cài Đặt & Chạy](#-cài-đặt--chạy)
-- [Biến Môi Trường](#-biến-môi-trường)
 - [Cấu Trúc Thư Mục](#-cấu-trúc-thư-mục)
 - [API Reference](#-api-reference)
 - [Cách Sử Dụng API](#-cách-sử-dụng-api)
