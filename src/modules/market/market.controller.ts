@@ -1,7 +1,9 @@
 import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { MarketService } from './market.service';
 import { okxConfig } from 'src/config/okx.config';
+import { throttlerConfig } from 'src/config/throttler.config';
 
 @ApiTags('Market')
 @Controller('market')
@@ -9,6 +11,7 @@ export class MarketController {
   constructor(private readonly marketService: MarketService) {}
 
   @Get('candles')
+  @Throttle(throttlerConfig.market.candles)
   @ApiOperation({ summary: 'Lấy dữ liệu nến (K-line) từ OKX' })
   @ApiQuery({
     name: 'instId',

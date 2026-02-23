@@ -1,9 +1,11 @@
 import { Controller, Post, Body, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { UserService } from './user.service';
 import type { HexString } from 'src/shared/types/web3.type';
 import type { ActivateUserValue } from 'src/shared/types/eip712.type';
 import { ActivateUserDto } from './dto/activate-user.dto';
+import { throttlerConfig } from 'src/config/throttler.config';
 
 @ApiTags('User')
 @Controller('user')
@@ -11,6 +13,7 @@ export class UserController {
   constructor(private readonly usersService: UserService) {}
 
   @Get('get-active-status')
+  @Throttle(throttlerConfig.user.status)
   @ApiOperation({ summary: 'Kiểm tra trạng thái kích hoạt của người dùng' })
   @ApiResponse({ status: 200, description: 'Trả về trạng thái isActive' })
   async isActiveUser(@Query('walletAddress') walletAddress: HexString) {
@@ -23,6 +26,7 @@ export class UserController {
   }
 
   @Post('post-active-user')
+  @Throttle(throttlerConfig.user.activate)
   @ApiOperation({ summary: 'Kích hoạt người dùng bằng chữ ký EIP-712' })
   @ApiResponse({ status: 201, description: 'Kích hoạt thành công' })
   async activateUser(@Body() body: ActivateUserDto) {

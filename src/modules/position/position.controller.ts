@@ -15,6 +15,7 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { PositionService } from './position.service';
 import {
   OpenMarketDto,
@@ -24,6 +25,7 @@ import {
   UpdatePositionDto,
   ClosePositionDto,
 } from './dto/position-api.dto';
+import { throttlerConfig } from 'src/config/throttler.config';
 
 @ApiTags('Position')
 @Controller()
@@ -33,6 +35,7 @@ export class PositionController {
   /* ===================== ORDERS ===================== */
 
   @Post('orders/market')
+  @Throttle(throttlerConfig.trading.market)
   @ApiOperation({ summary: 'Mở lệnh Market (khớp ngay)' })
   @ApiResponse({
     status: 201,
@@ -48,6 +51,7 @@ export class PositionController {
   }
 
   @Post('orders/limit')
+  @Throttle(throttlerConfig.trading.limit)
   @ApiOperation({ summary: 'Mở lệnh Limit (đợi khớp)' })
   @ApiResponse({ status: 201, description: 'Lệnh giới hạn đã được tạo' })
   openLimit(@Body() body: OpenLimitDto) {
@@ -60,6 +64,7 @@ export class PositionController {
   }
 
   @Put('orders/:id')
+  @Throttle(throttlerConfig.trading.update)
   @ApiOperation({ summary: 'Chỉnh sửa lệnh Limit đang chờ (Pending)' })
   @ApiParam({
     name: 'id',
@@ -77,6 +82,7 @@ export class PositionController {
   }
 
   @Delete('orders/:id')
+  @Throttle(throttlerConfig.trading.cancel)
   @ApiOperation({ summary: 'Hủy lệnh Limit đang chờ' })
   @ApiParam({ name: 'id', description: 'ID của lệnh cần hủy' })
   @ApiResponse({ status: 200, description: 'Hủy lệnh thành công' })
@@ -90,6 +96,7 @@ export class PositionController {
   }
 
   @Get('orders/open')
+  @Throttle(throttlerConfig.trading.read)
   @ApiOperation({ summary: 'Lấy các lệnh đang chờ (Pending Orders) của ví' })
   @ApiQuery({ name: 'walletAddress', example: '0x123...' })
   getOpenOrders(@Query('walletAddress') wallet: string) {
@@ -97,6 +104,7 @@ export class PositionController {
   }
 
   @Get('orders/history')
+  @Throttle(throttlerConfig.trading.history)
   @ApiOperation({ summary: 'Lấy lịch sử các lệnh đã đóng hoặc hủy' })
   @ApiQuery({ name: 'walletAddress', example: '0x123...' })
   getOrderHistory(@Query('walletAddress') wallet: string) {
@@ -106,6 +114,7 @@ export class PositionController {
   /* ===================== POSITIONS ===================== */
 
   @Get('positions')
+  @Throttle(throttlerConfig.trading.read)
   @ApiOperation({ summary: 'Lấy các vị thế đang mở (Active Positions) của ví' })
   @ApiQuery({ name: 'walletAddress', example: '0x123...' })
   getPositions(@Query('walletAddress') wallet: string) {
@@ -113,6 +122,7 @@ export class PositionController {
   }
 
   @Get('positions/:id')
+  @Throttle(throttlerConfig.trading.read)
   @ApiOperation({ summary: 'Lấy thông tin chi tiết một vị thế' })
   @ApiParam({ name: 'id', description: 'ID của vị thế' })
   getPosition(@Param('id') id: string) {
@@ -120,6 +130,7 @@ export class PositionController {
   }
 
   @Put('positions/:id')
+  @Throttle(throttlerConfig.trading.update)
   @ApiOperation({
     summary: 'Cập nhật vị thế (Điều chỉnh đòn bẩy, SL/TP hoặc đóng một phần)',
   })
@@ -135,6 +146,7 @@ export class PositionController {
   }
 
   @Post('positions/:id/close')
+  @Throttle(throttlerConfig.trading.close)
   @ApiOperation({ summary: 'Đóng vị thế toàn phần' })
   @ApiParam({ name: 'id', description: 'ID của vị thế cần đóng' })
   closePosition(@Param('id') id: string, @Body() body: ClosePositionDto) {
@@ -148,6 +160,7 @@ export class PositionController {
   }
 
   @Get('positions/history')
+  @Throttle(throttlerConfig.trading.history)
   @ApiOperation({ summary: 'Lấy lịch sử các vị thế đã đóng' })
   @ApiQuery({ name: 'walletAddress', example: '0x123...' })
   getPositionHistory(@Query('walletAddress') wallet: string) {
