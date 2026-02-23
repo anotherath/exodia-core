@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RealTimeService } from '../realtime-market.service';
 import { OkxWs } from 'src/infra/okx/okx.ws';
 import { RealTimeGateway } from '../realtime-market.gateway';
-import { MarketPriceCache } from '../market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { PairService } from '../../pair/pair.service';
 import { TickerData } from 'src/shared/types/okx.type';
 
@@ -10,7 +10,7 @@ describe('RealTimeService', () => {
   let service: RealTimeService;
   let okxWs: OkxWs;
   let gateway: RealTimeGateway;
-  let cache: MarketPriceCache;
+  let marketPriceRepo: RealtimeMarketPriceRepository;
   let pairService: PairService;
 
   const mockOkxWs = {
@@ -36,7 +36,7 @@ describe('RealTimeService', () => {
         RealTimeService,
         { provide: OkxWs, useValue: mockOkxWs },
         { provide: RealTimeGateway, useValue: mockGateway },
-        { provide: MarketPriceCache, useValue: mockCache },
+        { provide: RealtimeMarketPriceRepository, useValue: mockCache },
         { provide: PairService, useValue: mockPairService },
       ],
     }).compile();
@@ -44,7 +44,9 @@ describe('RealTimeService', () => {
     service = module.get<RealTimeService>(RealTimeService);
     okxWs = module.get<OkxWs>(OkxWs);
     gateway = module.get<RealTimeGateway>(RealTimeGateway);
-    cache = module.get<MarketPriceCache>(MarketPriceCache);
+    marketPriceRepo = module.get<RealtimeMarketPriceRepository>(
+      RealtimeMarketPriceRepository,
+    );
     pairService = module.get<PairService>(PairService);
 
     jest.clearAllMocks();
@@ -68,7 +70,7 @@ describe('RealTimeService', () => {
     // Giả lập OKX bắn giá về
     await onTickerCallback(mockTicker);
 
-    expect(cache.update).toHaveBeenCalledWith(mockTicker);
+    expect(marketPriceRepo.update).toHaveBeenCalledWith(mockTicker);
     expect(gateway.emitTicker).toHaveBeenCalledWith(mockTicker);
   });
 });

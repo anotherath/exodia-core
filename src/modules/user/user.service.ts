@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { UserRepository } from 'src/repositories/user/user.repository';
 import type { HexString } from 'src/shared/types/web3.type';
 import {

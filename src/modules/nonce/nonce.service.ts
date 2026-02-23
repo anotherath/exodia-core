@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import type { HexString } from 'src/shared/types/web3.type';
 
 @Injectable()

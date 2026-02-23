@@ -1,9 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { PositionValidationService } from '../position-validation.service';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
-import { MarketPriceCache } from '../../market/market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import * as eip712Util from 'src/shared/utils/eip712.util';
 import { HexString } from 'src/shared/types/web3.type';
 
@@ -14,7 +14,7 @@ jest.mock('src/shared/utils/eip712.util', () => ({
 describe('PositionValidationService', () => {
   let service: PositionValidationService;
   let nonceRepo: jest.Mocked<NonceRepository>;
-  let priceCache: jest.Mocked<MarketPriceCache>;
+  let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
   let pairRepo: jest.Mocked<PairRepository>;
 
   beforeEach(async () => {
@@ -29,7 +29,7 @@ describe('PositionValidationService', () => {
           },
         },
         {
-          provide: MarketPriceCache,
+          provide: RealtimeMarketPriceRepository,
           useValue: {
             get: jest.fn(),
           },
@@ -45,7 +45,7 @@ describe('PositionValidationService', () => {
 
     service = module.get<PositionValidationService>(PositionValidationService);
     nonceRepo = module.get(NonceRepository);
-    priceCache = module.get(MarketPriceCache);
+    marketPriceRepo = module.get(RealtimeMarketPriceRepository);
     pairRepo = module.get(PairRepository);
   });
 
@@ -96,14 +96,17 @@ describe('PositionValidationService', () => {
     });
 
     it('should throw if no market price', async () => {
-      priceCache.get.mockResolvedValue(undefined);
+      marketPriceRepo.get.mockResolvedValue(undefined);
       await expect(
         service.validateLimitPrice({ symbol: 'BTC', price: 100 } as any),
       ).rejects.toThrow('Hiện chưa có giá thị trường cho cặp tiền này');
     });
 
     it('should validate long limit price', async () => {
-      priceCache.get.mockResolvedValue({ askPx: '100', bidPx: '90' } as any);
+      marketPriceRepo.get.mockResolvedValue({
+        askPx: '100',
+        bidPx: '90',
+      } as any);
       // Valid long: price < ask
       await expect(
         service.validateLimitPrice({
@@ -123,7 +126,10 @@ describe('PositionValidationService', () => {
     });
 
     it('should validate short limit price', async () => {
-      priceCache.get.mockResolvedValue({ askPx: '100', bidPx: '90' } as any);
+      marketPriceRepo.get.mockResolvedValue({
+        askPx: '100',
+        bidPx: '90',
+      } as any);
       // Valid short: price > bid
       await expect(
         service.validateLimitPrice({

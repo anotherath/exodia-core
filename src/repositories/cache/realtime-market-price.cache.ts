@@ -4,7 +4,7 @@ import Redis from 'ioredis';
 import { TickerData } from 'src/shared/types/okx.type';
 
 @Injectable()
-export class MarketPriceCache {
+export class RealtimeMarketPriceRepository {
   private readonly KEY_PREFIX = 'market:price:';
 
   constructor(@InjectRedis() private readonly redis: Redis) {}

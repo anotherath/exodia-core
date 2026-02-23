@@ -1,18 +1,18 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import { Pair } from 'src/shared/types/pair.type';
 import type { HexString } from 'src/shared/types/web3.type';
 import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
-import { MarketPriceCache } from '../market/market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 
 @Injectable()
 export class PositionValidationService {
   constructor(
     private readonly nonceRepo: NonceRepository,
     private readonly pairRepo: PairRepository,
-    private readonly priceCache: MarketPriceCache,
+    private readonly marketPriceRepo: RealtimeMarketPriceRepository,
   ) {}
 
   // Validate symbol tồn tại, đang active, và các tham số hợp lệ với cấu hình của cặp giao dịch
@@ -90,7 +90,7 @@ export class PositionValidationService {
       throw new BadRequestException('Giá đặt (Limit Price) không hợp lệ');
     }
 
-    const ticker = await this.priceCache.get(symbol);
+    const ticker = await this.marketPriceRepo.get(symbol);
     if (!ticker) {
       throw new BadRequestException(
         'Hiện chưa có giá thị trường cho cặp tiền này',

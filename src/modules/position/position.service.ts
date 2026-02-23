@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PositionRepository } from 'src/repositories/position/position.repository';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import type { HexString } from 'src/shared/types/web3.type';
@@ -16,7 +16,7 @@ import {
   type ClosePositionValue,
   type UpdatePositionValue,
 } from 'src/shared/types/eip712.type';
-import { MarketPriceCache } from '../market/market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { PositionValidationService } from './position-validation.service';
 import { calculatePnL, calculateFee } from 'src/shared/utils/math.util';
 import { WalletService } from '../wallet/wallet.service';
@@ -29,7 +29,7 @@ export class PositionService {
   constructor(
     private readonly repo: PositionRepository,
     private readonly pairRepo: PairRepository,
-    private readonly priceCache: MarketPriceCache,
+    private readonly marketPriceRepo: RealtimeMarketPriceRepository,
     private readonly validator: PositionValidationService,
     private readonly walletService: WalletService,
   ) {}
@@ -52,7 +52,7 @@ export class PositionService {
     // Validate symbol và các tham số đầu vào
     const pair = await this.validator.validateSymbolAndParams(data);
 
-    const ticker = await this.priceCache.get(data.symbol);
+    const ticker = await this.marketPriceRepo.get(data.symbol);
     if (!ticker) {
       throw new BadRequestException(
         'Hiện chưa có giá thị trường cho cặp tiền này',
@@ -183,7 +183,7 @@ export class PositionService {
       const closeQty = pos.qty - data.qty;
       this.validator.validatePartialClose(pos, closeQty);
 
-      const ticker = await this.priceCache.get(pos.symbol);
+      const ticker = await this.marketPriceRepo.get(pos.symbol);
       if (!ticker)
         throw new BadRequestException('Không có giá thị trường để đóng lệnh');
 
@@ -306,7 +306,7 @@ export class PositionService {
       throw new BadRequestException('Vị thế không tồn tại hoặc đã đóng');
     }
 
-    const ticker = await this.priceCache.get(pos.symbol);
+    const ticker = await this.marketPriceRepo.get(pos.symbol);
     if (!ticker)
       throw new BadRequestException('Không có giá thị trường để đóng lệnh');
 

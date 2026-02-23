@@ -3,7 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PositionService } from '../position.service';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
-import { MarketPriceCache } from '../../market/market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { PositionValidationService } from '../position-validation.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { Position } from 'src/shared/types/position.type';
@@ -14,7 +14,7 @@ describe('PositionService', () => {
   let service: PositionService;
   let repo: jest.Mocked<PositionRepository>;
   let pairRepo: jest.Mocked<PairRepository>;
-  let priceCache: jest.Mocked<MarketPriceCache>;
+  let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
   let validator: jest.Mocked<PositionValidationService>;
   let walletService: jest.Mocked<WalletService>;
 
@@ -65,7 +65,7 @@ describe('PositionService', () => {
           },
         },
         {
-          provide: MarketPriceCache,
+          provide: RealtimeMarketPriceRepository,
           useValue: {
             get: jest.fn(),
           },
@@ -92,14 +92,14 @@ describe('PositionService', () => {
     service = module.get<PositionService>(PositionService);
     repo = module.get(PositionRepository);
     pairRepo = module.get(PairRepository);
-    priceCache = module.get(MarketPriceCache);
+    marketPriceRepo = module.get(RealtimeMarketPriceRepository);
     validator = module.get(PositionValidationService);
     walletService = module.get(WalletService);
   });
 
   describe('openMarket', () => {
     it(' nên mở lệnh market thành công và trừ phí mở lệnh', async () => {
-      priceCache.get.mockResolvedValue({
+      marketPriceRepo.get.mockResolvedValue({
         askPx: '50000',
         bidPx: '49000',
       } as any);
@@ -142,7 +142,7 @@ describe('PositionService', () => {
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
-      priceCache.get.mockResolvedValue({
+      marketPriceRepo.get.mockResolvedValue({
         bidPx: '45000',
         askPx: '46000',
       } as any);
@@ -210,7 +210,7 @@ describe('PositionService', () => {
         qty: 1,
       } as any;
       repo.findById.mockResolvedValue(existingPos);
-      priceCache.get.mockResolvedValue({
+      marketPriceRepo.get.mockResolvedValue({
         bidPx: '42000',
         askPx: '43000',
       } as any);

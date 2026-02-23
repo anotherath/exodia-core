@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { OkxWs } from 'src/infra/okx/okx.ws';
 import { RealTimeGateway } from './realtime-market.gateway';
-import { MarketPriceCache } from './market-price.cache';
+import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { TickerData } from 'src/shared/types/okx.type';
 import { PairService } from '../pair/pair.service';
 
@@ -12,7 +12,7 @@ export class RealTimeService implements OnModuleInit {
   constructor(
     private readonly okxWs: OkxWs,
     private readonly rtGateway: RealTimeGateway,
-    private readonly priceCache: MarketPriceCache,
+    private readonly marketPriceRepo: RealtimeMarketPriceRepository,
     private readonly pairService: PairService,
   ) {}
 
@@ -43,7 +43,7 @@ export class RealTimeService implements OnModuleInit {
    */
   private async onTicker(ticker: TickerData) {
     // Update In-Memory Cache (Now Redis backed)
-    await this.priceCache.update(ticker);
+    await this.marketPriceRepo.update(ticker);
 
     // Push to WebSocket clients
     this.rtGateway.emitTicker(ticker);

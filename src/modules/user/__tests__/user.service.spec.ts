@@ -1,5 +1,5 @@
 import { UserService } from '../user.service';
-import { NonceRepository } from 'src/repositories/cache/nonce-cache.repository';
+import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { UserRepository } from 'src/repositories/user/user.repository';
 import { connectTestDB, closeTestDB } from 'test/mongo-memory';
 import { UserModel } from 'src/repositories/user/user.model';
@@ -8,7 +8,7 @@ import { ActivateUserValue } from 'src/shared/types/eip712.type';
 import * as eip712Util from 'src/shared/utils/eip712.util';
 
 // Mock NonceRepository
-jest.mock('src/repositories/cache/nonce-cache.repository');
+jest.mock('src/repositories/cache/nonce.cache');
 
 // Mock verifyTypedDataSignature
 jest.mock('src/shared/utils/eip712.util', () => ({
