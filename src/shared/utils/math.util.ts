@@ -74,3 +74,41 @@ export const calculateFee = (
 ): number => {
   return qty * price * feeRate;
 };
+
+/**
+ * Tính Initial Margin (tiền ký quỹ cần có để mở lệnh).
+ * Công thức: IM = (Qty * Price) / Leverage
+ *
+ * @param qty - Khối lượng
+ * @param price - Giá vào lệnh
+ * @param leverage - Đòn bẩy
+ * @returns Tiền ký quỹ (USDT)
+ */
+export const calculateInitialMargin = (
+  qty: number,
+  price: number,
+  leverage: number,
+): number => {
+  return (qty * price) / leverage;
+};
+
+/**
+ * Tính tổng chi phí để mở lệnh (Margin + Phí).
+ * Dùng để kiểm tra số dư trước khi cho phép mở lệnh.
+ *
+ * @param qty - Khối lượng
+ * @param price - Giá vào lệnh
+ * @param leverage - Đòn bẩy
+ * @param feeRate - Tỷ lệ phí mở lệnh
+ * @returns Tổng chi phí (USDT)
+ */
+export const calculateOrderCost = (
+  qty: number,
+  price: number,
+  leverage: number,
+  feeRate: number,
+): number => {
+  const margin = calculateInitialMargin(qty, price, leverage);
+  const fee = calculateFee(qty, price, feeRate);
+  return margin + fee;
+};

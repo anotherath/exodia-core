@@ -1,4 +1,12 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  Logger,
+} from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
@@ -18,7 +26,12 @@ import {
 } from 'src/shared/types/eip712.type';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { PositionValidationService } from './position-validation.service';
-import { calculatePnL, calculateFee } from 'src/shared/utils/math.util';
+import {
+  calculatePnL,
+  calculateFee,
+  calculateInitialMargin,
+  calculateOrderCost,
+} from 'src/shared/utils/math.util';
 import { WalletService } from '../wallet/wallet.service';
 import { EIP712_DOMAIN } from 'src/shared/types/eip712.type';
 
@@ -27,6 +40,7 @@ export class PositionService {
   private readonly logger = new Logger(PositionService.name);
 
   constructor(
+    @InjectRedis() private readonly redis: Redis,
     private readonly repo: PositionRepository,
     private readonly pairRepo: PairRepository,
     private readonly marketPriceRepo: RealtimeMarketPriceRepository,
@@ -40,6 +54,7 @@ export class PositionService {
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
+    // Verify signature trước lock (không cần lock cho bước này)
     await this.validator.verifyAndConsumeNonce({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
@@ -49,42 +64,64 @@ export class PositionService {
       message: typedData as unknown as Record<string, unknown>,
     });
 
-    // Validate symbol và các tham số đầu vào
-    const pair = await this.validator.validateSymbolAndParams(data);
+    // Bọc trong Distributed Lock để chống race condition
+    return this.withLock(data.walletAddress, async () => {
+      // Validate symbol và các tham số đầu vào
+      const pair = await this.validator.validateSymbolAndParams(data);
 
-    const ticker = await this.marketPriceRepo.get(data.symbol);
-    if (!ticker) {
-      throw new BadRequestException(
-        'Hiện chưa có giá thị trường cho cặp tiền này',
+      const ticker = await this.marketPriceRepo.get(data.symbol);
+      if (!ticker) {
+        throw new BadRequestException(
+          'Hiện chưa có giá thị trường cho cặp tiền này',
+        );
+      }
+
+      const entryPrice =
+        data.side === 'long'
+          ? parseFloat(ticker.askPx)
+          : parseFloat(ticker.bidPx);
+
+      this.validator.validateSLTP(data.side, entryPrice, data.sl, data.tp);
+
+      // ★ Kiểm tra số dư trước khi trừ phí
+      await this.validator.validateMargin({
+        walletAddress: data.walletAddress,
+        qty: data.qty,
+        price: entryPrice,
+        leverage: data.leverage,
+        feeRate: pair.openFeeRate,
+      });
+
+      // Tính phí mở lệnh
+      const openFee = calculateFee(data.qty, entryPrice, pair.openFeeRate);
+
+      // Trừ phí mở lệnh khỏi tradeBalance
+      await this.walletService.updateTradePnL(
+        data.walletAddress,
+        EIP712_DOMAIN.chainId,
+        -openFee,
       );
-    }
 
-    const entryPrice =
-      data.side === 'long'
-        ? parseFloat(ticker.askPx)
-        : parseFloat(ticker.bidPx);
+      this.logger.log(
+        `Open Market ${data.symbol}: Entry ${entryPrice}, Open Fee ${openFee}`,
+      );
 
-    this.validator.validateSLTP(data.side, entryPrice, data.sl, data.tp);
+      const position = await this.repo.create({
+        ...data,
+        status: 'open',
+        entryPrice: entryPrice,
+        openFee,
+      });
 
-    // Tính phí mở lệnh (sử dụng pair đã validate)
-    const openFee = calculateFee(data.qty, entryPrice, pair.openFeeRate);
+      // ★ Ghi vào Redis để Go Engine theo dõi
+      const initialMargin = calculateInitialMargin(
+        data.qty,
+        entryPrice,
+        data.leverage,
+      );
+      await this.syncPositionToRedis(position, initialMargin, entryPrice);
 
-    // Trừ phí mở lệnh khỏi tradeBalance ngay lập tức
-    await this.walletService.updateTradePnL(
-      data.walletAddress,
-      EIP712_DOMAIN.chainId,
-      -openFee,
-    );
-
-    this.logger.log(
-      `Open Market ${data.symbol}: Entry ${entryPrice}, Open Fee ${openFee}`,
-    );
-
-    return this.repo.create({
-      ...data,
-      status: 'open',
-      entryPrice: entryPrice,
-      openFee,
+      return position;
     });
   }
 
@@ -103,14 +140,63 @@ export class PositionService {
       message: typedData as unknown as Record<string, unknown>,
     });
 
-    // Validate symbol và các tham số đầu vào
-    await this.validator.validateSymbolAndParams(data);
+    // Bọc trong Distributed Lock
+    return this.withLock(data.walletAddress, async () => {
+      // Validate symbol và các tham số đầu vào
+      const pair = await this.validator.validateSymbolAndParams(data);
 
-    await this.validator.validateLimitPrice(data);
+      await this.validator.validateLimitPrice(data);
 
-    return this.repo.create({
-      ...data,
-      status: 'pending',
+      // ★ Kiểm tra số dư trước khi đặt lệnh
+      await this.validator.validateMargin({
+        walletAddress: data.walletAddress,
+        qty: data.qty,
+        price: data.entryPrice!,
+        leverage: data.leverage,
+        feeRate: pair.openFeeRate,
+      });
+
+      const position = await this.repo.create({
+        ...data,
+        status: 'pending',
+      });
+
+      // ★ Reserved Margin: khóa tiền cho lệnh Limit chờ khớp
+      const reservedMargin = calculateOrderCost(
+        data.qty,
+        data.entryPrice!,
+        data.leverage,
+        pair.openFeeRate,
+      );
+      await this.redis.hset(
+        `orders:pending:${data.walletAddress.toLowerCase()}`,
+        position._id!.toString(),
+        JSON.stringify({
+          symbol: data.symbol,
+          side: data.side,
+          qty: data.qty,
+          entryPrice: data.entryPrice,
+          leverage: data.leverage,
+          reservedMargin,
+        }),
+      );
+
+      // Publish event cho Go Engine
+      await this.redis.publish(
+        'exodia:position:events',
+        JSON.stringify({
+          event: 'ORDER_PLACED',
+          walletAddress: data.walletAddress,
+          positionId: position._id!.toString(),
+          symbol: data.symbol,
+        }),
+      );
+
+      this.logger.log(
+        `Open Limit ${data.symbol}: Price ${data.entryPrice}, Reserved ${reservedMargin.toFixed(2)} USDT`,
+      );
+
+      return position;
     });
   }
 
@@ -360,5 +446,88 @@ export class PositionService {
   // Lấy thông tin vị thế theo ID
   async getById(id: string) {
     return this.repo.findById(id);
+  }
+
+  // ─── Private Helpers ───
+
+  /**
+   * Distributed Lock: đảm bảo chỉ 1 thao tác tại 1 thời điểm cho mỗi wallet.
+   * Sử dụng SET NX EX (atomic) + Lua script để unlock an toàn.
+   */
+  private async withLock<T>(
+    walletAddress: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `lock:position:${walletAddress.toLowerCase()}`;
+    const lockId = randomUUID();
+
+    // Acquire lock (NX = chỉ set nếu chưa tồn tại, EX = expire sau 5 giây)
+    const acquired = await this.redis.set(lockKey, lockId, 'EX', 5, 'NX');
+
+    if (!acquired) {
+      throw new ConflictException(
+        'Đang xử lý lệnh khác cho tài khoản này, vui lòng thử lại sau',
+      );
+    }
+
+    try {
+      return await fn();
+    } finally {
+      // Unlock an toàn: chỉ xóa lock nếu nó vẫn thuộc về request này
+      // (tránh xóa nhầm lock của request khác nếu lock đã expire)
+      const unlockScript = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      await this.redis.eval(unlockScript, 1, lockKey, lockId);
+    }
+  }
+
+  /**
+   * Ghi position vào Redis và publish event cho Go Engine.
+   * Được gọi sau khi tạo position thành công trong MongoDB.
+   */
+  private async syncPositionToRedis(
+    position: Position & { _id?: string },
+    initialMargin: number,
+    markPrice: number,
+  ): Promise<void> {
+    const wallet = position.walletAddress.toLowerCase();
+    const positionId = position._id!.toString();
+
+    // 1. Ghi vào positions:active:{wallet}
+    await this.redis.hset(
+      `positions:active:${wallet}`,
+      positionId,
+      JSON.stringify({
+        symbol: position.symbol,
+        side: position.side,
+        qty: position.qty,
+        entryPrice: position.entryPrice,
+        leverage: position.leverage,
+        sl: position.sl ?? null,
+        tp: position.tp ?? null,
+        markPrice,
+        unrealizedPnL: 0,
+        initialMargin,
+        maintenanceMargin: 0, // Go Engine sẽ tính
+        liquidationPrice: 0, // Go Engine sẽ tính
+      }),
+    );
+
+    // 2. Publish event cho Go Engine bắt đầu theo dõi
+    await this.redis.publish(
+      'exodia:position:events',
+      JSON.stringify({
+        event: 'POSITION_OPENED',
+        walletAddress: position.walletAddress,
+        positionId,
+        symbol: position.symbol,
+        side: position.side,
+      }),
+    );
   }
 }

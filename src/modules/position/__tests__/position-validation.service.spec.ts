@@ -4,8 +4,10 @@ import { PositionValidationService } from '../position-validation.service';
 import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
+import { WalletService } from '../../wallet/wallet.service';
 import * as eip712Util from 'src/shared/utils/eip712.util';
 import { HexString } from 'src/shared/types/web3.type';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
 jest.mock('src/shared/utils/eip712.util', () => ({
   verifyTypedDataSignature: jest.fn(),
@@ -16,11 +18,24 @@ describe('PositionValidationService', () => {
   let nonceRepo: jest.Mocked<NonceRepository>;
   let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
   let pairRepo: jest.Mocked<PairRepository>;
+  let redisMock: Record<string, jest.Mock>;
+  let walletServiceMock: Record<string, jest.Mock>;
 
   beforeEach(async () => {
+    redisMock = {
+      hgetall: jest.fn().mockResolvedValue({}),
+    };
+    walletServiceMock = {
+      getWallet: jest.fn().mockResolvedValue({ tradeBalance: 10000 }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PositionValidationService,
+        {
+          provide: getRedisConnectionToken('default'),
+          useValue: redisMock,
+        },
         {
           provide: NonceRepository,
           useValue: {
@@ -39,6 +54,10 @@ describe('PositionValidationService', () => {
           useValue: {
             findByInstId: jest.fn(),
           },
+        },
+        {
+          provide: WalletService,
+          useValue: walletServiceMock,
         },
       ],
     }).compile();
@@ -234,12 +253,12 @@ describe('PositionValidationService', () => {
 
     it('should throw if order amount < minAmount', async () => {
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
-      marketPriceRepo.get.mockResolvedValue({ last: '40000' } as any);
+      marketPriceRepo.get.mockResolvedValue({ last: '9000' } as any);
 
       await expect(
         service.validateSymbolAndParams({
           symbol: 'BTC-USDT',
-          qty: 0.0002, // 0.0002 * 40000 = 8 USD < 10 USD
+          qty: 0.001, // 0.001 * 9000 = 9 USD < 10 USD
           type: 'market',
         } as any),
       ).rejects.toThrow('Giá trị lệnh tối thiểu cho BTC-USDT là 10 USD');

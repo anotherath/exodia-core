@@ -1,4 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { InjectRedis } from '@nestjs-modules/ioredis';
+import Redis from 'ioredis';
 import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
@@ -6,13 +8,22 @@ import { Pair } from 'src/shared/types/pair.type';
 import type { HexString } from 'src/shared/types/web3.type';
 import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
+import { WalletService } from '../wallet/wallet.service';
+import {
+  calculateInitialMargin,
+  calculateFee,
+  calculateOrderCost,
+} from 'src/shared/utils/math.util';
+import { EIP712_DOMAIN } from 'src/shared/types/eip712.type';
 
 @Injectable()
 export class PositionValidationService {
   constructor(
+    @InjectRedis() private readonly redis: Redis,
     private readonly nonceRepo: NonceRepository,
     private readonly pairRepo: PairRepository,
     private readonly marketPriceRepo: RealtimeMarketPriceRepository,
+    private readonly walletService: WalletService,
   ) {}
 
   // Validate symbol tồn tại, đang active, và các tham số hợp lệ với cấu hình của cặp giao dịch
@@ -186,5 +197,61 @@ export class PositionValidationService {
         'Khối lượng đóng phải nhỏ hơn khối lượng hiện tại. Dùng chức năng đóng lệnh toàn bộ nếu muốn đóng hết',
       );
     }
+  }
+
+  // Kiểm tra số dư khả dụng trước khi mở lệnh
+  async validateMargin(params: {
+    walletAddress: string;
+    qty: number;
+    price: number;
+    leverage: number;
+    feeRate: number;
+  }): Promise<void> {
+    const { walletAddress, qty, price, leverage, feeRate } = params;
+
+    const orderCost = calculateOrderCost(qty, price, leverage, feeRate);
+    const availableBalance = await this.getAvailableBalance(walletAddress);
+
+    if (availableBalance < orderCost) {
+      const initialMargin = calculateInitialMargin(qty, price, leverage);
+      const openFee = calculateFee(qty, price, feeRate);
+      throw new BadRequestException(
+        `Không đủ số dư để mở lệnh. ` +
+          `Cần: ${orderCost.toFixed(2)} USDT ` +
+          `(Ký quỹ: ${initialMargin.toFixed(2)} + Phí: ${openFee.toFixed(2)}). ` +
+          `Số dư khả dụng: ${availableBalance.toFixed(2)} USDT`,
+      );
+    }
+  }
+
+  // Lấy số dư khả dụng: ưu tiên Redis (real-time), fallback MongoDB (cold start)
+  private async getAvailableBalance(walletAddress: string): Promise<number> {
+    const account = await this.redis.hgetall(
+      `account:${walletAddress.toLowerCase()}`,
+    );
+
+    // Đã có dữ liệu trong Redis (đang có vị thế mở)
+    if (account && account.tradeBalance) {
+      const tradeBalance = parseFloat(account.tradeBalance);
+      const totalUnrealizedPnL = parseFloat(account.totalUnrealizedPnL || '0');
+      const totalInitialMargin = parseFloat(account.totalInitialMargin || '0');
+      const totalReservedMargin = parseFloat(
+        account.totalReservedMargin || '0',
+      );
+
+      return (
+        tradeBalance +
+        totalUnrealizedPnL -
+        totalInitialMargin -
+        totalReservedMargin
+      );
+    }
+
+    // Cold start: chưa có vị thế nào, lấy từ MongoDB
+    const wallet = await this.walletService.getWallet(
+      walletAddress,
+      EIP712_DOMAIN.chainId,
+    );
+    return wallet?.tradeBalance ?? 0;
   }
 }

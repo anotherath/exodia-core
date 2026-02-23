@@ -9,6 +9,7 @@ import { WalletService } from '../../wallet/wallet.service';
 import { Position } from 'src/shared/types/position.type';
 import { Pair } from 'src/shared/types/pair.type';
 import { HexString } from 'src/shared/types/web3.type';
+import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
 describe('PositionService', () => {
   let service: PositionService;
@@ -17,6 +18,7 @@ describe('PositionService', () => {
   let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
   let validator: jest.Mocked<PositionValidationService>;
   let walletService: jest.Mocked<WalletService>;
+  let redisMock: Record<string, jest.Mock>;
 
   const walletAddress =
     '0x1776040b08a8e10086a603bf27c2e1e1e1e1e1e1' as HexString;
@@ -38,12 +40,22 @@ describe('PositionService', () => {
     instId: 'BTC-USDT',
     maxLeverage: 100,
     minVolume: 0.001,
+    minAmount: 10,
     openFeeRate: 0.0001, // 0.01%
     closeFeeRate: 0.0002, // 0.02%
     isActive: true,
   };
 
   beforeEach(async () => {
+    redisMock = {
+      set: jest.fn().mockResolvedValue('OK'),
+      eval: jest.fn().mockResolvedValue(1),
+      hset: jest.fn().mockResolvedValue(1),
+      publish: jest.fn().mockResolvedValue(1),
+      hgetall: jest.fn().mockResolvedValue({}),
+      hdel: jest.fn().mockResolvedValue(1),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PositionService,
@@ -78,6 +90,7 @@ describe('PositionService', () => {
             validateLimitPrice: jest.fn(),
             validateSLTP: jest.fn(),
             validatePartialClose: jest.fn(),
+            validateMargin: jest.fn(),
           },
         },
         {
@@ -85,6 +98,10 @@ describe('PositionService', () => {
           useValue: {
             updateTradePnL: jest.fn(),
           },
+        },
+        {
+          provide: getRedisConnectionToken('default'),
+          useValue: redisMock,
         },
       ],
     }).compile();
@@ -105,6 +122,7 @@ describe('PositionService', () => {
       } as any);
       validator.validateSymbolAndParams.mockResolvedValue(mockPair);
       repo.create.mockResolvedValue({
+        _id: 'pos123',
         ...mockPosition,
         status: 'open',
         entryPrice: 50000,
