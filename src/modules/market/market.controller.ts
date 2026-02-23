@@ -20,20 +20,7 @@ export class MarketController {
     required: false,
     description: 'Khung thời gian nến',
     example: '1m',
-    enum: [
-      '1m',
-      '3m',
-      '5m',
-      '15m',
-      '30m',
-      '1h',
-      '2h',
-      '4h',
-      '6h',
-      '12h',
-      '1D',
-      '1W',
-    ],
+    enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'],
   })
   @ApiQuery({
     name: 'limit',
