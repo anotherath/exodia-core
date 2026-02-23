@@ -132,20 +132,31 @@ cd exodia-core
 npm install
 ```
 
-### 2. Khởi động MongoDB & Redis
+### 2. Cấu hình biến môi trường
+
+Dự án sử dụng file `.env` để quản lý các cấu hình. Bạn cần tạo file này từ template:
+
+```bash
+cp .env.example .env
+```
+
+Sau đó, mở file `.env` và cập nhật các thông tin sau:
+
+- `MONGO_ROOT_USER`: Tên đăng ký admin cho MongoDB.
+- `MONGO_ROOT_PASSWORD`: Mật khẩu cho MongoDB.
+- `MONGODB_URI`: Cập nhật lại chuỗi kết nối khớp với user/pass vừa đặt.
+
+> **Lưu ý quan trọng:** Bạn **PHẢI** thiết lập `username` và `password` của riêng bạn trong file `.env` trước khi khởi động Docker.
+
+### 3. Khởi động MongoDB & Redis
+
+Sau khi đã cấu hình xong file `.env`, hãy chạy:
 
 ```bash
 docker compose up -d
 ```
 
-Lệnh này sẽ khởi động:
-
-- **MongoDB** tại `localhost:27017`
-- **Redis** tại `localhost:6379`
-
-### 3. Cấu hình biến môi trường
-
-Tạo file `.env` tại thư mục gốc (xem mục [Biến Môi Trường](#-biến-môi-trường)).
+Lệnh này sẽ khởi động MongoDB và Redis dưới dạng container ngầm (`detached mode`).
 
 ### 4. Chạy ứng dụng
 
@@ -163,14 +174,13 @@ Server sẽ chạy tại: **http://localhost:3000**
 ### 5. Truy cập Swagger UI
 
 Mở trình duyệt và vào: **http://localhost:3000/api**
-
 Tại đây có thể xem và thử tất cả API trực tiếp.
 
 ---
 
 ## 🔐 Biến Môi Trường
 
-Tạo file `.env` tại thư mục gốc (file này đã được `.gitignore` bảo vệ):
+Tạo file `.env` tại thư mục gốc bằng cách copy từ file [`.env.example`](.env.example). File `.env` chứa các thông tin nhạy cảm nên đã được cấu hình trong `.gitignore` để không bị đẩy lên GitHub.
 
 ```env
 # --- CẤU HÌNH DỰ ÁN ---
@@ -178,13 +188,16 @@ PROJECT_NAME=exodia
 NETWORK_NAME=exodia-network
 
 # --- MONGODB ---
+# LƯU Ý: Tuyệt đối không để lộ mật khẩu thật tại đây nếu đẩy lên public repo
 MONGO_IMAGE=mongo:latest
 MONGO_CONTAINER_NAME=exodia-mongodb
 MONGO_PORT=27017
-MONGO_ROOT_USER=<username>
-MONGO_ROOT_PASSWORD=<password>
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=password123
 MONGO_DB_NAME=exodia-database
-MONGODB_URI=mongodb://<username>:<password>@localhost:27017/exodia-database?authSource=admin
+
+# URI kết nối (lưu ý khớp với username/password ở trên)
+MONGODB_URI=mongodb://admin:password123@localhost:27017/exodia-database?authSource=admin
 
 # --- REDIS ---
 REDIS_IMAGE=redis:alpine
