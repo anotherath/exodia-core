@@ -1,6 +1,7 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { MarketService } from './market.service';
+import { okxConfig } from 'src/config/okx.config';
 
 @ApiTags('Market')
 @Controller('market')
@@ -20,7 +21,7 @@ export class MarketController {
     required: false,
     description: 'Khung thời gian nến',
     example: '1m',
-    enum: ['1m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'],
+    enum: okxConfig.candleBars,
   })
   @ApiQuery({
     name: 'limit',
