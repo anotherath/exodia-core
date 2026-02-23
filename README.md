@@ -50,27 +50,6 @@ graph LR
     ENGINE <-->|Events / State Root| BC[Blockchain<br/>Ethereum]
 ```
 
-### Luồng dữ liệu giữa các thành phần:
-
-```
-📥 Nạp tiền:
-   User → exodia-contract (deposit) → Blockchain Event
-   → exodia-engine lắng nghe → Cập nhật MongoDB & Redis → exodia-core phản ánh số dư mới
-
-📤 Rút tiền:
-   User → exodia-core (yêu cầu rút) → exodia-engine gom vào State Root
-   → exodia-engine đẩy State Root lên Blockchain (định kỳ)
-   → exodia-contract xác thực → Cho phép rút
-
-📈 Mở lệnh Market:
-   User ký EIP-712 → exodia-ui gửi đến exodia-core → exodia-core xác thực & validate margin
-   → exodia-core ghi MongoDB + đồng bộ Redis → exodia-engine nhận event → Theo dõi PnL
-
-📊 Dữ liệu Real-time:
-   exodia-engine tính PnL/Margin liên tục → Ghi vào Redis
-   → exodia-core đọc Redis khi cần → Trả về cho exodia-ui qua REST/WebSocket
-```
-
 ---
 
 ## 🎯 Vai Trò Của exodia-core
