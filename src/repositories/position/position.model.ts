@@ -49,13 +49,7 @@ const PositionSchema = new Schema<Position>(
       required: true,
     },
 
-    // giá đặt (chỉ dùng cho limit)
-    price: {
-      type: Number,
-      default: null,
-    },
-
-    // giá khớp trung bình
+    // giá khớp trung bình (hoặc giá đặt nếu là lệnh pending)
     entryPrice: {
       type: Number,
       default: null,

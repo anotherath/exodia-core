@@ -71,7 +71,9 @@ describe('PairController', () => {
         ...mockPair,
         isActive: false,
       } as any);
-      const result = await controller.updateStatus('BTC-USDT', false);
+      const result = await controller.updateStatus('BTC-USDT', {
+        isActive: false,
+      });
       expect(service.updateStatus).toHaveBeenCalledWith('BTC-USDT', false);
       expect(result!.isActive).toBe(false);
     });

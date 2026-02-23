@@ -84,7 +84,6 @@ export class PositionService {
       ...data,
       status: 'open',
       entryPrice: entryPrice,
-      price: null,
       openFee,
     });
   }
@@ -112,7 +111,6 @@ export class PositionService {
     return this.repo.create({
       ...data,
       status: 'pending',
-      entryPrice: null,
     });
   }
 
@@ -144,7 +142,7 @@ export class PositionService {
 
     return this.repo.update(id, {
       qty: data.qty,
-      price: data.price,
+      entryPrice: data.entryPrice,
       sl: data.sl,
       tp: data.tp,
       leverage: data.leverage,
@@ -220,7 +218,6 @@ export class PositionService {
         type: pos.type,
         status: 'closed',
         qty: closeQty,
-        price: pos.price,
         entryPrice: pos.entryPrice,
         exitPrice,
         leverage: pos.leverage,

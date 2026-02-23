@@ -23,10 +23,7 @@ export interface Position {
   // khối lượng mong muốn ban đầu
   qty: number;
 
-  // giá đặt (limit)
-  price?: number | null;
-
-  // giá khớp trung bình
+  // giá khớp trung bình (hoặc giá đặt nếu là lệnh pending)
   entryPrice?: number | null;
 
   // đòn bẩy

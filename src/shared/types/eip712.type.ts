@@ -13,7 +13,7 @@ export const OpenOrderTypes = {
     { name: 'side', type: 'string' },
     { name: 'type', type: 'string' },
     { name: 'qty', type: 'uint256' },
-    { name: 'price', type: 'uint256' },
+    { name: 'entryPrice', type: 'uint256' },
     { name: 'leverage', type: 'uint256' },
     { name: 'sl', type: 'uint256' },
     { name: 'tp', type: 'uint256' },
@@ -27,7 +27,7 @@ export const UpdateOrderTypes = {
     { name: 'walletAddress', type: 'address' },
     { name: 'orderId', type: 'string' },
     { name: 'qty', type: 'uint256' },
-    { name: 'price', type: 'uint256' },
+    { name: 'entryPrice', type: 'uint256' },
     { name: 'leverage', type: 'uint256' },
     { name: 'sl', type: 'uint256' },
     { name: 'tp', type: 'uint256' },
@@ -73,7 +73,7 @@ export interface OpenOrderValue {
   side: 'long' | 'short';
   type: 'market' | 'limit';
   qty: bigint;
-  price: bigint;
+  entryPrice: bigint;
   leverage: bigint;
   sl: bigint;
   tp: bigint;
@@ -84,7 +84,7 @@ export interface UpdateOrderValue {
   walletAddress: string;
   orderId: string;
   qty: bigint;
-  price: bigint;
+  entryPrice: bigint;
   leverage: bigint;
   sl: bigint;
   tp: bigint;

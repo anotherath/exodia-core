@@ -12,7 +12,7 @@ export class OpenOrderValueDto {
   @ApiProperty({ example: '100000000', description: 'BigInt string' })
   qty: string;
   @ApiProperty({ example: '50000000000', description: 'BigInt string' })
-  price: string;
+  entryPrice: string;
   @ApiProperty({ example: '10', description: 'BigInt string' })
   leverage: string;
   @ApiProperty({ example: '45000000000', description: 'BigInt string' })
@@ -31,7 +31,7 @@ export class UpdateOrderValueDto {
   @ApiProperty({ example: '200000000' })
   qty: string;
   @ApiProperty({ example: '51000000000' })
-  price: string;
+  entryPrice: string;
   @ApiProperty({ example: '20' })
   leverage: string;
   @ApiProperty({ example: '46000000000' })
@@ -110,7 +110,7 @@ export class OpenLimitDto {
   @ApiProperty({ example: 0.1 })
   qty: number;
   @ApiProperty({ example: 48000 })
-  price: number;
+  entryPrice: number;
   @ApiProperty({ example: 10 })
   leverage: number;
   @ApiProperty({ example: 45000, required: false })
@@ -127,7 +127,7 @@ export class UpdateOrderDto {
   @ApiProperty({ example: 0.2 })
   qty: number;
   @ApiProperty({ example: 49000 })
-  price: number;
+  entryPrice: number;
   @ApiProperty({ example: 20 })
   leverage: number;
   @ApiProperty({ example: 46000, required: false })

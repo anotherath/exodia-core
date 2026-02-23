@@ -84,9 +84,9 @@ export class PositionValidationService {
 
   // Kiểm tra tính hợp lệ giá đặt cho lệnh Limit
   async validateLimitPrice(data: Position) {
-    const { symbol, side, price, tp, sl } = data;
+    const { symbol, side, entryPrice, tp, sl } = data;
 
-    if (!price || price <= 0) {
+    if (!entryPrice || entryPrice <= 0) {
       throw new BadRequestException('Giá đặt (Limit Price) không hợp lệ');
     }
 
@@ -101,20 +101,20 @@ export class PositionValidationService {
     const bid = parseFloat(ticker.bidPx);
 
     if (side === 'long') {
-      if (price >= ask) {
+      if (entryPrice >= ask) {
         throw new BadRequestException(
           'Giá Long Limit phải thấp hơn giá thị trường hiện tại',
         );
       }
     } else {
-      if (price <= bid) {
+      if (entryPrice <= bid) {
         throw new BadRequestException(
           'Giá Short Limit phải cao hơn giá thị trường hiện tại',
         );
       }
     }
 
-    this.validateSLTP(side, price, sl, tp);
+    this.validateSLTP(side, entryPrice, sl, tp);
   }
 
   // Kiểm tra tính hợp lệ của SL/TP so với giá tham chiếu
