@@ -1,16 +1,16 @@
 # ⚔️ Exodia Core
 
-**Backend API cho sàn giao dịch phái sinh phi tập trung (Decentralized Perpetual Exchange).**
+**Backend API cho sàn giao dịch web3 phái sinh (Web3 Perpetual Exchange).**
 
 Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng vai trò cầu nối giữa giao diện người dùng và hệ thống xử lý giao dịch. Core chịu trách nhiệm nhận lệnh từ frontend, xác thực chữ ký EIP-712, kiểm tra margin, quản lý ví, và đồng bộ dữ liệu real-time với Engine thông qua Redis.
 
-> **Đây là 1 trong 4 thành phần** của hệ sinh thái Exodia. README này tập trung vào **exodia-core**.
+> **Đây là 1 trong 4 thành phần** chính của Exodia. README này tập trung vào **exodia-core**.
 
 ---
 
 ## 📋 Mục Lục
 
-- [Hệ Sinh Thái Exodia](#-hệ-sinh-thái-exodia)
+- [Cấu Trúc Các Dự Án](#-cấu-trúc-các-dự-án)
 - [Kiến Trúc Tổng Quan](#-kiến-trúc-tổng-quan)
 - [Vai Trò Của Core](#-vai-trò-của-core)
 - [Công Nghệ Sử Dụng](#-công-nghệ-sử-dụng)
@@ -26,7 +26,7 @@ Exodia Core là lớp API trung tâm được xây dựng bằng NestJS, đóng 
 
 ---
 
-## 🌐 Hệ Sinh Thái Exodia
+## 🌐 Cấu Trúc Các Dự Án
 
 | Repository          | Công nghệ | Vai trò                                                                    |
 | ------------------- | --------- | -------------------------------------------------------------------------- |
@@ -176,7 +176,6 @@ Mở trình duyệt và vào: **http://localhost:3000/api**
 Tại đây có thể xem và thử tất cả API trực tiếp.
 
 ---
-
 
 ## 📂 Cấu Trúc Thư Mục
 
