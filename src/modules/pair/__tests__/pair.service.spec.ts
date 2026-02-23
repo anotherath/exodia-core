@@ -13,6 +13,7 @@ describe('PairService', () => {
     instId: 'BTC-USDT',
     maxLeverage: 100,
     minVolume: 0.001,
+    minAmount: 10,
     openFeeRate: 0.0001,
     closeFeeRate: 0.0001,
     isActive: true,

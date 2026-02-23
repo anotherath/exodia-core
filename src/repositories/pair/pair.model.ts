@@ -21,6 +21,12 @@ const PairSchema = new Schema<Pair>(
       min: 0,
       default: 10,
     },
+    minAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 10,
+    },
     openFeeRate: {
       type: Number,
       required: true,

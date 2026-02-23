@@ -187,6 +187,7 @@ describe('PositionValidationService', () => {
       instId: 'BTC-USDT',
       maxLeverage: 100,
       minVolume: 0.001,
+      minAmount: 10,
       isActive: true,
       openFeeRate: 0.0001,
       closeFeeRate: 0.0001,
@@ -229,6 +230,19 @@ describe('PositionValidationService', () => {
           qty: 0.0001,
         } as any),
       ).rejects.toThrow('Khối lượng tối thiểu cho BTC-USDT là 0.001');
+    });
+
+    it('should throw if order amount < minAmount', async () => {
+      pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      marketPriceRepo.get.mockResolvedValue({ last: '40000' } as any);
+
+      await expect(
+        service.validateSymbolAndParams({
+          symbol: 'BTC-USDT',
+          qty: 0.0002, // 0.0002 * 40000 = 8 USD < 10 USD
+          type: 'market',
+        } as any),
+      ).rejects.toThrow('Giá trị lệnh tối thiểu cho BTC-USDT là 10 USD');
     });
 
     it('should throw if leverage > maxLeverage', async () => {

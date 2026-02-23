@@ -37,6 +37,26 @@ export class PositionValidationService {
       );
     }
 
+    // Validate min amount in USD
+    const referencePrice = data.type === 'limit' ? data.entryPrice : null;
+    let priceForMinAmount = referencePrice;
+
+    if (!priceForMinAmount) {
+      const ticker = await this.marketPriceRepo.get(data.symbol);
+      if (ticker) {
+        priceForMinAmount = parseFloat(ticker.last);
+      }
+    }
+
+    if (priceForMinAmount && priceForMinAmount > 0) {
+      const orderAmountUSD = data.qty * priceForMinAmount;
+      if (orderAmountUSD < pair.minAmount) {
+        throw new BadRequestException(
+          `Giá trị lệnh tối thiểu cho ${data.symbol} là ${pair.minAmount} USD (Hiện tại: ${orderAmountUSD.toFixed(2)} USD)`,
+        );
+      }
+    }
+
     if (data.leverage > pair.maxLeverage) {
       throw new BadRequestException(
         `Đòn bẩy tối đa cho ${data.symbol} là ${pair.maxLeverage}x`,

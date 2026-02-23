@@ -14,6 +14,12 @@ export class CreatePairDto {
   minVolume: number;
 
   @ApiProperty({
+    description: 'Số tiền giao dịch tối thiểu (USD)',
+    example: 10,
+  })
+  minAmount: number;
+
+  @ApiProperty({
     description: 'Tỷ lệ phí mở lệnh (ví dụ: 0.0001 = 0.01%)',
     example: 0.0001,
   })
