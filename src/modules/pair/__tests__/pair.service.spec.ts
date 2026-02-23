@@ -12,6 +12,9 @@ describe('PairService', () => {
   const mockPair: Pair = {
     instId: 'BTC-USDT',
     maxLeverage: 100,
+    minVolume: 0.001,
+    openFeeRate: 0.0001,
+    closeFeeRate: 0.0001,
     isActive: true,
   };
 
