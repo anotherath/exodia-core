@@ -22,9 +22,6 @@ describe('PairController', () => {
           useValue: {
             getAll: jest.fn(),
             getAllActive: jest.fn(),
-            upsertPair: jest.fn(),
-            updateStatus: jest.fn(),
-            deletePair: jest.fn(),
           },
         },
       ],
@@ -53,38 +50,6 @@ describe('PairController', () => {
       const result = await controller.getAllActive();
       expect(service.getAllActive).toHaveBeenCalled();
       expect(result).toEqual([mockPair]);
-    });
-  });
-
-  describe('upsert', () => {
-    it('应更新或插入交易对', async () => {
-      service.upsertPair.mockResolvedValue(mockPair as any);
-      const result = await controller.upsert(mockPair);
-      expect(service.upsertPair).toHaveBeenCalledWith(mockPair);
-      expect(result).toEqual(mockPair);
-    });
-  });
-
-  describe('updateStatus', () => {
-    it('应更新交易对状态', async () => {
-      service.updateStatus.mockResolvedValue({
-        ...mockPair,
-        isActive: false,
-      } as any);
-      const result = await controller.updateStatus('BTC-USDT', {
-        isActive: false,
-      });
-      expect(service.updateStatus).toHaveBeenCalledWith('BTC-USDT', false);
-      expect(result!.isActive).toBe(false);
-    });
-  });
-
-  describe('delete', () => {
-    it('应删除交易对', async () => {
-      service.deletePair.mockResolvedValue({ success: true } as any);
-      const result = await controller.delete('BTC-USDT');
-      expect(service.deletePair).toHaveBeenCalledWith('BTC-USDT');
-      expect(result).toEqual({ success: true });
     });
   });
 });

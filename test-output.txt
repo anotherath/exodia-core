@@ -1,119 +1,75 @@
 ﻿node.exe : PASS 
-src/modules/nonce/__tests__/nonce.service.spec.ts
+src/modules/nonce/__tests__/nonce.controller.spec.ts
 At C:\Program Files\nodejs\npx.ps1:29 char:3
 +   & $NODE_EXE $NPX_CLI_JS $args
 +   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     + CategoryInfo          : NotSpecified: (PASS src/module. 
-   ..service.spec.ts:String) [], RemoteException
+   ..troller.spec.ts:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-  NonceService
-    ΓêÜ  n├¬n trß║ú vß╗ü nonce hiß╗çn tß║íi nß║┐u c├▓n hiß╗çu 
-lß╗▒c (75 ms)
-    ΓêÜ  n├¬n tß║ío v├á trß║ú vß╗ü nonce mß╗¢i nß║┐u kh├┤ng 
-t├¼m thß║Ñy nonce hß╗úp lß╗ç (19 ms)
-
-PASS src/modules/pair/__tests__/pair.service.spec.ts
-  PairService
-    upsertPair
-      ΓêÜ should upsert and subscribe if pair is active (54 
+  NonceController
+    ΓêÜ n├¬n trß║ú vß╗ü nonce th├ánh c├┤ng (61 ms)
+    ΓêÜ n├¬n lß╗ùi nß║┐u walletAddress kh├┤ng hß╗úp lß╗ç (42 
 ms)
-      ΓêÜ should upsert and unsubscribe if pair is inactive 
-(12 ms)
-    updateStatus
-      ΓêÜ should update status and subscribe if isActive is 
-true (12 ms)
-      ΓêÜ should update status and unsubscribe if isActive is 
-false (10 ms)
-      ΓêÜ should return null if pair not found (11 ms)
-    deletePair
-      ΓêÜ should delete and unsubscribe (10 ms)
+
+PASS src/modules/market/__tests__/market.controller.spec.ts
+  MarketController
+    getCandles
+      ΓêÜ n├¬n gß╗ìi marketService.getCandles vß╗¢i ─æ├║ng 
+tham sß╗æ (66 ms)
+      ΓêÜ n├¬n xß╗¡ l├╜ chuyß╗ân ─æß╗òi kiß╗âu dß╗» liß╗çu 
+cho limit (7 ms)
+
+PASS src/modules/wallet/__tests__/wallet.controller.spec.ts
+  WalletController
+    getWallet
+      ΓêÜ should return wallet info (60 ms)
+    depositToTrade
+      ΓêÜ should deposit to trade and return success (12 ms)
+    withdrawFromTrade
+      ΓêÜ should withdraw from trade and return success (14 
+ms)
+
+PASS src/modules/pair/__tests__/pair.controller.spec.ts
+  PairController
+    ΓêÜ should be defined (47 ms)
+    getAll
+      ΓêÜ σ║öΦ┐öσ¢₧µëÇµ£ëΣ║ñµÿôσ»╣ (15 ms)
+    getAllActive
+      ΓêÜ σ║öΦ┐öσ¢₧µëÇµ£ëµ┐Çµ┤╗τÜäΣ║ñµÿôσ»╣ (9 ms)
+
+PASS src/modules/user/__tests__/user.controller.spec.ts
+  UserController
+    isActiveUser
+      ΓêÜ should return active status (34 ms)
+      ΓêÜ should return false if user not active (6 ms)
+    activateUser
+      ΓêÜ should activate user and return status (7 ms)
+      ΓêÜ should return isActive false if activation fails (8 
+ms)
 
 PASS 
-src/modules/market/__tests__/realtime-market.service.spec.ts
-  RealTimeService
-    ΓêÜ should connect to OKX WSS and subscribe to active 
-pairs on init (54 ms)
-    ΓêÜ should update cache and emit ticker when a new ticker 
-arrives (12 ms)
-
-PASS src/modules/position/__tests__/position-validation.servic
-e.spec.ts
-  PositionValidationService
-    verifyAndConsumeNonce
-      ΓêÜ should success and delete nonce (63 ms)
-      ΓêÜ should throw if nonce invalid (45 ms)
-      ΓêÜ should throw if signature invalid (11 ms)
-    validateLimitPrice
-      ΓêÜ should throw if entryPrice is null (14 ms)
-      ΓêÜ should throw if entryPrice is undefined (12 ms)
-      ΓêÜ should throw if no market price (12 ms)
-      ΓêÜ should validate long limit price (8 ms)
-      ΓêÜ should validate short limit price (8 ms)
-    validateSLTP
-      ΓêÜ should validate SL/TP relative to reference price 
-for Long (10 ms)
-      ΓêÜ should validate Long SL/TP (7 ms)
-      ΓêÜ should validate Short SL/TP (5 ms)
-    validateSymbolAndParams
-      ΓêÜ should success and return pair (4 ms)
-      ΓêÜ should throw if pair not found (4 ms)
-      ΓêÜ should throw if pair inactive (3 ms)
-      ΓêÜ should throw if qty < minVolume (5 ms)
-      ΓêÜ should throw if order amount < minAmount (3 ms)
-      ΓêÜ should throw if leverage > maxLeverage (4 ms)
-
-PASS src/modules/position/__tests__/position.service.spec.ts 
-(5.027 s)
-  PositionService
-    openMarket
-      ΓêÜ  n├¬n mß╗ƒ lß╗çnh market th├ánh c├┤ng v├á trß╗½ 
-ph├¡ mß╗ƒ lß╗çnh (47 ms)
-    updateOpen
-      ΓêÜ  n├¬n ─æ├│ng mß╗Öt phß║ºn vß╗ï thß║┐: t├¡nh PnL 
-r├▓ng v├á trß╗½ ph├¡ ─æ├│ng (15 ms)
-      ΓêÜ  n├¬n lß╗ùi nß║┐u cß╗æ t├¼nh thay ─æß╗òi ─æ├▓n 
-bß║⌐y (42 ms)
-      ΓêÜ  n├¬n lß╗ùi nß║┐u cß╗æ t├¼nh t─âng qty (7 ms)
-    close
-      ΓêÜ  n├¬n ─æ├│ng to├án bß╗Ö vß╗ï thß║┐: t├¡nh PnL r├▓ng 
-v├á trß╗½ ph├¡ ─æ├│ng (14 ms)
-
-PASS src/modules/wallet/__tests__/wallet.service.spec.ts 
-(5.723 s)
-  WalletService
-    getWallet
-      ΓêÜ should create and return a new wallet if it does 
-not exist (51 ms)
-      ΓêÜ should return existing wallet if it already exists 
-(31 ms)
-    depositToTrade
-      ΓêÜ should deposit to trade successfully when 
-sufficient funds exist (29 ms)
-      ΓêÜ should throw BadRequestException if balance is 
-insufficient (24 ms)
-    withdrawFromTrade
-      ΓêÜ should withdraw from trade successfully (29 ms)
-      ΓêÜ should throw BadRequestException if trade balance 
-is insufficient (14 ms)
-    updateTradePnL
-      ΓêÜ should update trade balance with positive PnL (25 
+src/modules/position/__tests__/position.controller.spec.ts
+  PositionController
+    Orders
+      ΓêÜ openMarket n├¬n gß╗ìi service ─æ├║ng params (39 ms)
+      ΓêÜ openLimit n├¬n gß╗ìi service ─æ├║ng params (6 ms)
+      ΓêÜ updateOrder n├¬n gß╗ìi service ─æ├║ng params (6 ms)
+      ΓêÜ cancelOrder n├¬n gß╗ìi service ─æ├║ng params (7 ms)
+      ΓêÜ getOpenOrders n├¬n gß╗ìi service (8 ms)
+      ΓêÜ getOrderHistory n├¬n gß╗ìi service (7 ms)
+    Positions
+      ΓêÜ getPositions n├¬n gß╗ìi service (5 ms)
+      ΓêÜ getPosition n├¬n gß╗ìi service (7 ms)
+      ΓêÜ updatePosition n├¬n gß╗ìi service ─æ├║ng params (6 
 ms)
-      ΓêÜ should update trade balance with negative PnL (19 
+      ΓêÜ closePosition n├¬n gß╗ìi service ─æ├║ng params (6 
 ms)
+      ΓêÜ getPositionHistory n├¬n gß╗ìi service (5 ms)
 
-PASS src/modules/user/__tests__/user.service.spec.ts (6.094 s)
-  UserService
-    ΓêÜ should activate user successfully (55 ms)
-    ΓêÜ should return false if nonce not found or invalid (19 
-ms)
-    ΓêÜ should return false if nonce does not match (5 ms)
-    ΓêÜ should return false if signature verification fails 
-(4 ms)
-    ΓêÜ should check active user correctly (18 ms)
-
-Test Suites: 7 passed, 7 total
-Tests:       45 passed, 45 total
+Test Suites: 6 passed, 6 total
+Tests:       25 passed, 25 total
 Snapshots:   0 total
-Time:        8.005 s
-Ran all test suites matching src/modules/.*/.*service.spec.ts.
+Time:        6.466 s
+Ran all test suites matching 
+src/modules/.*/.*controller.spec.ts.
