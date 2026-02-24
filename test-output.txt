@@ -1,0 +1,49 @@
+﻿node.exe : PASS 
+src/repositories/wallet/__tests__/wallet.repository.spec.ts 
+(5.209 s)
+At C:\Program Files\nodejs\npx.ps1:29 char:3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (PASS src/reposi. 
+   ..ec.ts (5.209 s):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  WalletRepository
+    find
+      ΓêÜ should return wallet by address and chainId (25 ms)
+      ΓêÜ should return null when wallet not found (4 ms)
+    upsert
+      ΓêÜ should upsert wallet with default values on insert 
+(6 ms)
+    deposit
+      ΓêÜ should deposit amount to balance and totalDeposited 
+(6 ms)
+      ΓêÜ should lowercase wallet address (5 ms)
+      ΓêÜ should round deposit amount with precision (4 ms)
+    depositToTrade
+      ΓêÜ should move funds from balance to tradeBalance with 
+atomic guard (14 ms)
+      ΓêÜ should throw when balance is insufficient 
+(modifiedCount 0) (60 ms)
+      ΓêÜ should decrease balance and increase tradeBalance 
+(4 ms)
+    withdrawFromTrade
+      ΓêÜ should move funds from tradeBalance back to balance 
+with atomic guard (3 ms)
+      ΓêÜ should throw when trade balance is insufficient 
+(modifiedCount 0) (3 ms)
+      ΓêÜ should increase balance and decrease tradeBalance 
+(4 ms)
+    updateTradePnL
+      ΓêÜ should add positive PnL using aggregation pipeline 
+with $max floor (5 ms)
+      ΓêÜ should subtract negative PnL with $max floor at 0 
+(3 ms)
+      ΓêÜ should lowercase wallet address (2 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       15 passed, 15 total
+Snapshots:   0 total
+Time:        6.139 s
+Ran all test suites matching 
+src/repositories/wallet/__tests__/wallet.repository.spec.ts.

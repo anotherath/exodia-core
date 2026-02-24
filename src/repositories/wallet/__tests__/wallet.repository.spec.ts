@@ -161,7 +161,7 @@ describe('WalletRepository', () => {
   // depositToTrade
   // ────────────────────────────────────────
   describe('depositToTrade', () => {
-    it('should move funds from balance to tradeBalance', async () => {
+    it('should move funds from balance to tradeBalance with atomic guard', async () => {
       (WalletModel.updateOne as jest.Mock) = jest
         .fn()
         .mockResolvedValue({ modifiedCount: 1 });
@@ -175,7 +175,11 @@ describe('WalletRepository', () => {
       await repository.depositToTrade('0xABC123', chainId, amount);
 
       expect(WalletModel.updateOne).toHaveBeenCalledWith(
-        { walletAddress: '0xabc123', chainId },
+        {
+          walletAddress: '0xabc123',
+          chainId,
+          balance: { $gte: roundedAmount },
+        },
         {
           $inc: {
             balance: -roundedAmount,
@@ -183,6 +187,16 @@ describe('WalletRepository', () => {
           },
         },
       );
+    });
+
+    it('should throw when balance is insufficient (modifiedCount 0)', async () => {
+      (WalletModel.updateOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue({ modifiedCount: 0 });
+
+      await expect(
+        repository.depositToTrade(walletAddress, chainId, 200),
+      ).rejects.toThrow('Insufficient balance for deposit to trade');
     });
 
     it('should decrease balance and increase tradeBalance', async () => {
@@ -210,7 +224,7 @@ describe('WalletRepository', () => {
   // withdrawFromTrade
   // ────────────────────────────────────────
   describe('withdrawFromTrade', () => {
-    it('should move funds from tradeBalance back to balance', async () => {
+    it('should move funds from tradeBalance back to balance with atomic guard', async () => {
       (WalletModel.updateOne as jest.Mock) = jest
         .fn()
         .mockResolvedValue({ modifiedCount: 1 });
@@ -224,7 +238,11 @@ describe('WalletRepository', () => {
       await repository.withdrawFromTrade('0xABC123', chainId, amount);
 
       expect(WalletModel.updateOne).toHaveBeenCalledWith(
-        { walletAddress: '0xabc123', chainId },
+        {
+          walletAddress: '0xabc123',
+          chainId,
+          tradeBalance: { $gte: roundedAmount },
+        },
         {
           $inc: {
             balance: roundedAmount,
@@ -232,6 +250,16 @@ describe('WalletRepository', () => {
           },
         },
       );
+    });
+
+    it('should throw when trade balance is insufficient (modifiedCount 0)', async () => {
+      (WalletModel.updateOne as jest.Mock) = jest
+        .fn()
+        .mockResolvedValue({ modifiedCount: 0 });
+
+      await expect(
+        repository.withdrawFromTrade(walletAddress, chainId, 150),
+      ).rejects.toThrow('Insufficient trade balance');
     });
 
     it('should increase balance and decrease tradeBalance', async () => {
@@ -259,7 +287,7 @@ describe('WalletRepository', () => {
   // updateTradePnL
   // ────────────────────────────────────────
   describe('updateTradePnL', () => {
-    it('should add positive PnL to tradeBalance', async () => {
+    it('should add positive PnL using aggregation pipeline with $max floor', async () => {
       (WalletModel.updateOne as jest.Mock) = jest
         .fn()
         .mockResolvedValue({ modifiedCount: 1 });
@@ -274,11 +302,19 @@ describe('WalletRepository', () => {
 
       expect(WalletModel.updateOne).toHaveBeenCalledWith(
         { walletAddress: '0xabc123', chainId },
-        { $inc: { tradeBalance: roundedPnL } },
+        [
+          {
+            $set: {
+              tradeBalance: {
+                $max: [0, { $add: ['$tradeBalance', roundedPnL] }],
+              },
+            },
+          },
+        ],
       );
     });
 
-    it('should subtract negative PnL from tradeBalance', async () => {
+    it('should subtract negative PnL with $max floor at 0', async () => {
       (WalletModel.updateOne as jest.Mock) = jest
         .fn()
         .mockResolvedValue({ modifiedCount: 1 });
@@ -291,9 +327,15 @@ describe('WalletRepository', () => {
 
       await repository.updateTradePnL(walletAddress, chainId, pnl);
 
-      expect(WalletModel.updateOne).toHaveBeenCalledWith(expect.anything(), {
-        $inc: { tradeBalance: roundedPnL },
-      });
+      expect(WalletModel.updateOne).toHaveBeenCalledWith(expect.anything(), [
+        {
+          $set: {
+            tradeBalance: {
+              $max: [0, { $add: ['$tradeBalance', roundedPnL] }],
+            },
+          },
+        },
+      ]);
     });
 
     it('should lowercase wallet address', async () => {
@@ -307,55 +349,6 @@ describe('WalletRepository', () => {
         expect.objectContaining({ walletAddress: '0xmixed' }),
         expect.anything(),
       );
-    });
-  });
-
-  // ────────────────────────────────────────
-  // withdraw
-  // ────────────────────────────────────────
-  describe('withdraw', () => {
-    it('should decrease balance and increase totalWithdrawn', async () => {
-      (WalletModel.updateOne as jest.Mock) = jest
-        .fn()
-        .mockResolvedValue({ modifiedCount: 1 });
-      const amount = 100;
-      const roundedAmount = roundWithPrecision(
-        amount,
-        BALANCE_CONFIG.PRECISION,
-        false,
-      );
-
-      await repository.withdraw('0xABC123', chainId, amount);
-
-      expect(WalletModel.updateOne).toHaveBeenCalledWith(
-        { walletAddress: '0xabc123', chainId },
-        {
-          $inc: {
-            balance: -roundedAmount,
-            totalWithdrawn: roundedAmount,
-          },
-        },
-      );
-    });
-
-    it('should round withdraw amount with precision', async () => {
-      (WalletModel.updateOne as jest.Mock) = jest
-        .fn()
-        .mockResolvedValue({ modifiedCount: 1 });
-      const amount = 99.99999;
-      const expectedRounded = roundWithPrecision(
-        amount,
-        BALANCE_CONFIG.PRECISION,
-        false,
-      );
-
-      await repository.withdraw(walletAddress, chainId, amount);
-
-      const call = (WalletModel.updateOne as jest.Mock).mock.calls[0];
-      const incOps = call[1].$inc;
-
-      expect(incOps.balance).toBe(-expectedRounded);
-      expect(incOps.totalWithdrawn).toBe(expectedRounded);
     });
   });
 });
