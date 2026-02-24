@@ -134,6 +134,7 @@ export class WalletRepository {
           },
         },
       ],
+      { updatePipeline: true },
     );
   }
 }

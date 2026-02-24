@@ -108,10 +108,24 @@ describe('PositionValidationService', () => {
   });
 
   describe('validateLimitPrice', () => {
-    it('should throw if entryPrice <= 0', async () => {
+    it('should throw if entryPrice is null', async () => {
       await expect(
-        service.validateLimitPrice({ entryPrice: 0 } as any),
-      ).rejects.toThrow('Giá đặt (Limit Price) không hợp lệ');
+        service.validateLimitPrice({
+          entryPrice: null,
+          symbol: 'BTC',
+          side: 'long',
+        } as any),
+      ).rejects.toThrow(
+        'Giá đặt lệnh (Entry Price) là bắt buộc cho lệnh Limit',
+      );
+    });
+
+    it('should throw if entryPrice is undefined', async () => {
+      await expect(
+        service.validateLimitPrice({ symbol: 'BTC', side: 'long' } as any),
+      ).rejects.toThrow(
+        'Giá đặt lệnh (Entry Price) là bắt buộc cho lệnh Limit',
+      );
     });
 
     it('should throw if no market price', async () => {
@@ -169,13 +183,11 @@ describe('PositionValidationService', () => {
   });
 
   describe('validateSLTP', () => {
-    it('should throw if SL/TP <= 0', () => {
-      expect(() => service.validateSLTP('long', 100, -1, null)).toThrow(
-        'Giá cắt lỗ (SL) phải lớn hơn 0',
-      );
-      expect(() => service.validateSLTP('long', 100, null, 0)).toThrow(
-        'Giá chốt lời (TP) phải lớn hơn 0',
-      );
+    it('should validate SL/TP relative to reference price for Long', () => {
+      // Long: SL must be < referencePrice, negative SL still satisfies sl < referencePrice
+      // so it won't throw here (validatePositiveNumbers handles <= 0 separately)
+      expect(() => service.validateSLTP('long', 100, 50, null)).not.toThrow();
+      expect(() => service.validateSLTP('long', 100, null, 150)).not.toThrow();
     });
 
     it('should validate Long SL/TP', () => {
@@ -214,10 +226,16 @@ describe('PositionValidationService', () => {
 
     it('should success and return pair', async () => {
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      marketPriceRepo.get.mockResolvedValue({
+        askPx: '50000',
+        bidPx: '49900',
+      } as any);
       const result = await service.validateSymbolAndParams({
         symbol: 'BTC-USDT',
         qty: 0.1,
         leverage: 10,
+        side: 'long',
+        type: 'market',
       } as any);
       expect(result).toEqual(mockPair);
     });
@@ -225,7 +243,11 @@ describe('PositionValidationService', () => {
     it('should throw if pair not found', async () => {
       pairRepo.findByInstId.mockResolvedValue(null);
       await expect(
-        service.validateSymbolAndParams({ symbol: 'UNKNOWN' } as any),
+        service.validateSymbolAndParams({
+          symbol: 'UNKNOWN',
+          qty: 1,
+          leverage: 10,
+        } as any),
       ).rejects.toThrow("Cặp giao dịch 'UNKNOWN' không tồn tại trong hệ thống");
     });
 
@@ -235,7 +257,11 @@ describe('PositionValidationService', () => {
         isActive: false,
       } as any);
       await expect(
-        service.validateSymbolAndParams({ symbol: 'BTC-USDT' } as any),
+        service.validateSymbolAndParams({
+          symbol: 'BTC-USDT',
+          qty: 0.1,
+          leverage: 10,
+        } as any),
       ).rejects.toThrow(
         "Cặp giao dịch 'BTC-USDT' hiện đang tạm dừng giao dịch",
       );
@@ -247,30 +273,42 @@ describe('PositionValidationService', () => {
         service.validateSymbolAndParams({
           symbol: 'BTC-USDT',
           qty: 0.0001,
+          leverage: 10,
         } as any),
       ).rejects.toThrow('Khối lượng tối thiểu cho BTC-USDT là 0.001');
     });
 
     it('should throw if order amount < minAmount', async () => {
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
-      marketPriceRepo.get.mockResolvedValue({ last: '9000' } as any);
+      marketPriceRepo.get.mockResolvedValue({
+        askPx: '9000',
+        bidPx: '8900',
+      } as any);
 
       await expect(
         service.validateSymbolAndParams({
           symbol: 'BTC-USDT',
           qty: 0.001, // 0.001 * 9000 = 9 USD < 10 USD
+          leverage: 10,
           type: 'market',
+          side: 'long',
         } as any),
       ).rejects.toThrow('Giá trị lệnh tối thiểu cho BTC-USDT là 10 USD');
     });
 
     it('should throw if leverage > maxLeverage', async () => {
       pairRepo.findByInstId.mockResolvedValue(mockPair as any);
+      marketPriceRepo.get.mockResolvedValue({
+        askPx: '50000',
+        bidPx: '49900',
+      } as any);
       await expect(
         service.validateSymbolAndParams({
           symbol: 'BTC-USDT',
           qty: 0.1,
           leverage: 125,
+          type: 'market',
+          side: 'long',
         } as any),
       ).rejects.toThrow('Đòn bẩy tối đa cho BTC-USDT là 100x');
     });

@@ -311,6 +311,7 @@ describe('WalletRepository', () => {
             },
           },
         ],
+        { updatePipeline: true },
       );
     });
 
@@ -327,15 +328,19 @@ describe('WalletRepository', () => {
 
       await repository.updateTradePnL(walletAddress, chainId, pnl);
 
-      expect(WalletModel.updateOne).toHaveBeenCalledWith(expect.anything(), [
-        {
-          $set: {
-            tradeBalance: {
-              $max: [0, { $add: ['$tradeBalance', roundedPnL] }],
+      expect(WalletModel.updateOne).toHaveBeenCalledWith(
+        expect.anything(),
+        [
+          {
+            $set: {
+              tradeBalance: {
+                $max: [0, { $add: ['$tradeBalance', roundedPnL] }],
+              },
             },
           },
-        },
-      ]);
+        ],
+        { updatePipeline: true },
+      );
     });
 
     it('should lowercase wallet address', async () => {
@@ -347,6 +352,7 @@ describe('WalletRepository', () => {
 
       expect(WalletModel.updateOne).toHaveBeenCalledWith(
         expect.objectContaining({ walletAddress: '0xmixed' }),
+        expect.anything(),
         expect.anything(),
       );
     });
