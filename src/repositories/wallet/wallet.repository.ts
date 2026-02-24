@@ -67,8 +67,12 @@ export class WalletRepository {
       BALANCE_CONFIG.PRECISION,
       false,
     );
-    await WalletModel.updateOne(
-      { walletAddress: walletAddress.toLowerCase(), chainId },
+    const result = await WalletModel.updateOne(
+      {
+        walletAddress: walletAddress.toLowerCase(),
+        chainId,
+        balance: { $gte: roundedAmount },
+      },
       {
         $inc: {
           balance: -roundedAmount,
@@ -76,6 +80,10 @@ export class WalletRepository {
         },
       },
     );
+
+    if (result.modifiedCount === 0) {
+      throw new Error('Insufficient balance for deposit to trade');
+    }
   }
 
   // Rút tiền từ quỹ giao dịch (tradeBalance) về quỹ khả dụng (balance)
@@ -89,8 +97,12 @@ export class WalletRepository {
       BALANCE_CONFIG.PRECISION,
       false,
     );
-    await WalletModel.updateOne(
-      { walletAddress: walletAddress.toLowerCase(), chainId },
+    const result = await WalletModel.updateOne(
+      {
+        walletAddress: walletAddress.toLowerCase(),
+        chainId,
+        tradeBalance: { $gte: roundedAmount },
+      },
       {
         $inc: {
           balance: roundedAmount,
@@ -98,37 +110,30 @@ export class WalletRepository {
         },
       },
     );
+
+    if (result.modifiedCount === 0) {
+      throw new Error('Insufficient trade balance');
+    }
   }
 
   // Cập nhật lợi nhuận/thua lỗ trực tiếp vào tradeBalance
   async updateTradePnL(walletAddress: string, chainId: number, pnl: number) {
     // Làm tròn PnL theo cấu hình trước khi cộng vào tradeBalance
     const roundedPnL = roundWithPrecision(pnl, BALANCE_CONFIG.PRECISION, false);
-    await WalletModel.updateOne(
-      { walletAddress: walletAddress.toLowerCase(), chainId },
-      {
-        $inc: {
-          tradeBalance: roundedPnL,
-        },
-      },
-    );
-  }
 
-  // Rút tiền khỏi hệ thống
-  async withdraw(walletAddress: string, chainId: number, amount: number) {
-    const roundedAmount = roundWithPrecision(
-      amount,
-      BALANCE_CONFIG.PRECISION,
-      false,
-    );
+    // Sử dụng aggregation pipeline để cập nhật tradeBalance theo kiểu: max(0, tradeBalance + pnl)
+    // Giúp chặn số dư âm một cách nguyên tử (atomic)
     await WalletModel.updateOne(
       { walletAddress: walletAddress.toLowerCase(), chainId },
-      {
-        $inc: {
-          balance: -roundedAmount,
-          totalWithdrawn: roundedAmount,
+      [
+        {
+          $set: {
+            tradeBalance: {
+              $max: [0, { $add: ['$tradeBalance', roundedPnL] }],
+            },
+          },
         },
-      },
+      ],
     );
   }
 }
