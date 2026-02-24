@@ -28,6 +28,9 @@ export class PositionValidationService {
 
   // Validate symbol tồn tại, đang active, và các tham số hợp lệ với cấu hình của cặp giao dịch
   async validateSymbolAndParams(data: Position): Promise<Pair> {
+    // 0. Chặn các số âm, zero hoặc NaN ngay từ đầu
+    this.validatePositiveNumbers(data);
+
     const pair = await this.pairRepo.findByInstId(data.symbol);
 
     if (!pair) {
@@ -42,30 +45,42 @@ export class PositionValidationService {
       );
     }
 
+    // 1. Validate min volume (Technical constraint - không cần giá thị trường)
     if (data.qty < pair.minVolume) {
       throw new BadRequestException(
-        `Khối lượng tối thiểu cho ${data.symbol} là ${pair.minVolume}`,
+        `Khối lượng tối thiểu cho ${data.symbol} là ${pair.minVolume} (Hiện tại: ${data.qty})`,
       );
     }
 
-    // Validate min amount in USD
+    // 2. Validate min amount in USD (Economic constraint - cần giá thị trường)
     const referencePrice = data.type === 'limit' ? data.entryPrice : null;
     let priceForMinAmount = referencePrice;
 
     if (!priceForMinAmount) {
       const ticker = await this.marketPriceRepo.get(data.symbol);
-      if (ticker) {
-        priceForMinAmount = parseFloat(ticker.last);
-      }
-    }
-
-    if (priceForMinAmount && priceForMinAmount > 0) {
-      const orderAmountUSD = data.qty * priceForMinAmount;
-      if (orderAmountUSD < pair.minAmount) {
+      if (!ticker) {
         throw new BadRequestException(
-          `Giá trị lệnh tối thiểu cho ${data.symbol} là ${pair.minAmount} USD (Hiện tại: ${orderAmountUSD.toFixed(2)} USD)`,
+          `Không thể xác định giá thị trường cho ${data.symbol} để kiểm tra giá trị lệnh tối thiểu`,
         );
       }
+      // Long Market khớp với giá Ask, Short Market khớp với giá Bid
+      priceForMinAmount =
+        data.side === 'long'
+          ? parseFloat(ticker.askPx)
+          : parseFloat(ticker.bidPx);
+    }
+
+    if (priceForMinAmount <= 0) {
+      throw new BadRequestException(
+        `Giá thị trường cho ${data.symbol} không hợp lệ (${priceForMinAmount})`,
+      );
+    }
+
+    const orderAmountUSD = data.qty * priceForMinAmount;
+    if (orderAmountUSD < pair.minAmount) {
+      throw new BadRequestException(
+        `Giá trị lệnh tối thiểu cho ${data.symbol} là ${pair.minAmount} USD (Hiện tại: ${orderAmountUSD.toFixed(2)} USD)`,
+      );
     }
 
     if (data.leverage > pair.maxLeverage) {
@@ -117,8 +132,10 @@ export class PositionValidationService {
   async validateLimitPrice(data: Position) {
     const { symbol, side, entryPrice, tp, sl } = data;
 
-    if (!entryPrice || entryPrice <= 0) {
-      throw new BadRequestException('Giá đặt (Limit Price) không hợp lệ');
+    if (entryPrice === null || entryPrice === undefined) {
+      throw new BadRequestException(
+        'Giá đặt lệnh (Entry Price) là bắt buộc cho lệnh Limit',
+      );
     }
 
     const ticker = await this.marketPriceRepo.get(symbol);
@@ -155,13 +172,6 @@ export class PositionValidationService {
     sl?: number | null,
     tp?: number | null,
   ) {
-    if (sl !== undefined && sl !== null && sl <= 0) {
-      throw new BadRequestException('Giá cắt lỗ (SL) phải lớn hơn 0');
-    }
-    if (tp !== undefined && tp !== null && tp <= 0) {
-      throw new BadRequestException('Giá chốt lời (TP) phải lớn hơn 0');
-    }
-
     if (side === 'long') {
       if (sl && sl >= referencePrice) {
         throw new BadRequestException(
@@ -189,9 +199,6 @@ export class PositionValidationService {
 
   // Validate đóng lệnh một phần
   validatePartialClose(pos: Position, closeQty: number) {
-    if (closeQty <= 0) {
-      throw new BadRequestException('Khối lượng đóng phải lớn hơn 0');
-    }
     if (closeQty >= pos.qty) {
       throw new BadRequestException(
         'Khối lượng đóng phải nhỏ hơn khối lượng hiện tại. Dùng chức năng đóng lệnh toàn bộ nếu muốn đóng hết',
@@ -253,5 +260,46 @@ export class PositionValidationService {
       EIP712_DOMAIN.chainId,
     );
     return wallet?.tradeBalance ?? 0;
+  }
+
+  // Helper thực hiện chặn các số âm/NaN/Infinity cho đầu vào
+  private validatePositiveNumbers(data: Partial<Position>): void {
+    const fieldsToValidate: (keyof Position)[] = [
+      'qty',
+      'leverage',
+      'entryPrice',
+      'tp',
+      'sl',
+    ];
+
+    for (const field of fieldsToValidate) {
+      const value = data[field];
+
+      // Nếu field có giá trị (không undefined/null)
+      if (value !== undefined && value !== null) {
+        // Chỉ validate nếu là kiểu number
+        if (typeof value === 'number') {
+          if (value <= 0 || !Number.isFinite(value)) {
+            const label = this.getFieldLabel(field);
+            throw new BadRequestException(`${label} phải là số dương hợp lệ`);
+          }
+        }
+      } else if (field === 'qty' || field === 'leverage') {
+        // qty và leverage là bắt buộc phải có giá trị
+        const label = this.getFieldLabel(field);
+        throw new BadRequestException(`${label} không được để trống`);
+      }
+    }
+  }
+
+  private getFieldLabel(field: keyof Position): string {
+    const labels: Partial<Record<keyof Position, string>> = {
+      qty: 'Khối lượng',
+      leverage: 'Đòn bẩy',
+      entryPrice: 'Giá đặt lệnh',
+      tp: 'Giá chốt lời (TP)',
+      sl: 'Giá cắt lỗ (SL)',
+    };
+    return labels[field] || (field as string);
   }
 }
