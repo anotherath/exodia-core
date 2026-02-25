@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { OkxWs } from 'src/infra/okx/okx.ws';
 import { Pair } from 'src/shared/types/pair.type';
+import { PairValidationService } from './pair-validation.service';
 
 @Injectable()
 export class PairService {
@@ -10,6 +11,7 @@ export class PairService {
   constructor(
     private readonly pairRepo: PairRepository,
     private readonly okxWs: OkxWs,
+    private readonly pairValidation: PairValidationService,
   ) {}
 
   getAllActive() {
@@ -21,6 +23,7 @@ export class PairService {
   }
 
   getByInstId(instId: string) {
+    this.pairValidation.validateInstId(instId);
     return this.pairRepo.findByInstId(instId);
   }
 
@@ -28,6 +31,7 @@ export class PairService {
    * Thêm hoặc cập nhật cặp tiền, đồng thời đồng bộ WebSocket.
    */
   async upsertPair(data: Pair) {
+    this.pairValidation.validateUpsertData(data);
     const result = await this.pairRepo.upsert(data);
 
     if (result.isActive) {
@@ -46,6 +50,7 @@ export class PairService {
    * Cập nhật trạng thái bật/tắt của cặp tiền.
    */
   async updateStatus(instId: string, isActive: boolean) {
+    this.pairValidation.validateInstId(instId);
     const result = await this.pairRepo.updateStatus(instId, isActive);
     if (!result) return null;
 
@@ -63,6 +68,7 @@ export class PairService {
    * Xóa cặp tiền và ngừng nhận giá.
    */
   async deletePair(instId: string) {
+    this.pairValidation.validateInstId(instId);
     await this.pairRepo.delete(instId);
     this.okxWs.unsubscribe([instId]);
     this.logger.log(`Pair ${instId} deleted and unsubscribed.`);
