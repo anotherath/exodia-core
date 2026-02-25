@@ -1,65 +1,101 @@
 # Vai trò và Danh mục Admin Controllers - Exodia Core
 
-Tài liệu này quy định các quyền hạn của Admin và danh sách các Controller cần được bảo vệ để quản trị hệ thống Exodia. Các endpoint này **BẮT BUỘC** phải có guard xác thực (ví dụ `AdminGuard` hoặc `RolesGuard`).
+Tài liệu này định nghĩa hệ thống phân quyền (RBAC), các vai trò của Admin và danh sách các phương thức quản trị đã được tích hợp trong Repository cũng như kế hoạch triển khai Controller.
 
 ---
 
-## 1. Tổng quan vai trò của Admin
+## 1. Hệ thống Vai trò (Admin Roles)
 
-Admin trong hệ thống Exodia không tham gia giao dịch trực tiếp bằng tiền của mình nhưng giữ quyền điều phối "luật chơi":
+Hệ thống Exodia phân tách thực thể **Admin** (đăng nhập bằng username/password) và thực thể **User** (đăng nhập bằng Wallet). Thực thể Admin có 3 cấp bậc quyền hạn chính:
 
-- **Quản lý thị trường**: Quyết định cặp tiền nào được giao dịch.
-- **Quản lý rủi ro**: Đình chỉ giao dịch khi có biến động mạnh.
-- **Quản trị người dùng**: Kích hoạt hoặc hạn chế người dùng tham gia hệ thống.
-- **Giám sát hệ thống**: Theo dõi trạng thái các lệnh và vị thế đang mở toàn hệ thống.
+- **`super_admin`**: Toàn quyền hệ thống. Có khả năng tạo, chỉnh sửa hoặc vô hiệu hóa các Admin khác. Có quyền can thiệp vào cấu hình lõi.
+- **`operator`**: Điều hành viên. Có quyền quản lý các cặp giao dịch (Pairs), xử lý các vị thế cố định (Positions) và điều chỉnh số dư ví (Wallets) để xử lý sự cố.
+- **`support`**: Nhân viên hỗ trợ. Chủ yếu là quyền đọc (Read-only) để kiểm tra lịch sử, trạng thái người dùng và vị thế để giải đáp thắc mắc khách hàng.
 
----
-
-## 2. Danh mục các Admin Controller
-
-### 2.1. AdminPairController (Quản lý cặp giao dịch)
-
-Đây là controller quan trọng nhất để điều khiển luồng dữ liệu của Engine.
-
-- **`POST /admin/pairs`**: Thêm cặp giao dịch mới (BTC-USDT, ETH-USDT...). Gọi `PairService.upsertPair`.
-- **`PATCH /admin/pairs/:instId/status`**: Bật/Tắt một cặp tiền. Khi Admin tắt một cặp, hệ thống phải tự động hủy các subscription WebSocket để tiết kiệm tài nguyên. Gọi `PairService.updateStatus`.
-- **`DELETE /admin/pairs/:instId`**: Xóa hoàn toàn một cặp tiền khỏi DB và ngừng nhận giá. Gọi `PairService.deletePair`.
-
-### 2.2. AdminUserController (Quản lý người dùng)
-
-- **`GET /admin/users`**: Lấy danh sách tất cả người dùng trong hệ thống.
-- **`POST /admin/users/:walletAddress/activate`**: Kích hoạt người dùng mới (sau khi xác minh Nonce/Signature).
-- **`PATCH /admin/users/:walletAddress/limits`**: Thiết lập giới hạn giao dịch riêng cho từng user (ví dụ: đòn bẩy tối đa, volume tối đa).
-
-### 2.3. AdminPositionController (Giám sát rủi ro)
-
-- **`GET /admin/positions/active`**: Xem tất cả các vị thế (`Positions`) đang mở của toàn bộ người dùng để tính toán rủi ro hệ thống.
-- **`POST /admin/positions/:id/close-force`**: Cưỡng chế đóng một vị thế trong trường hợp khẩn cấp hoặc xử lý sự cố.
-- **`GET /admin/positions/history`**: Truy xuất lịch sử lệnh của bất kỳ user nào để giải quyết tranh chấp.
-
-### 2.4. AdminSystemController (Cấu hình hệ thống)
-
-- **`GET /admin/system/health`**: Kiểm tra trạng thái kết nối WebSocket tới OKX, trạng thái Redis và MongoDB.
-- **`PATCH /admin/system/throttler`**: Điều chỉnh Rate Limit (Throttler) động mà không cần restart server (nếu đã tập trung hóa config).
-- **`POST /admin/system/maintenance`**: Bật chế độ bảo trì (Maintenance Mode) - tạm dừng tất cả các API cho phép mở lệnh mới.
+> **Lưu ý**: Thực thể `User` cũng có trường `role` (user/admin) nhưng đây là quyền hạn trong ngữ cảnh Wallet, khác với hệ thống Admin Account.
 
 ---
 
-## 3. Quy tắc triển khai (Rules)
+## 2. Các Repository hỗ trợ Admin
 
-1. **Prefix Phân biệt**: Tất cả các Admin endpoint nên bắt đầu bằng `/admin/`.
-2. **Thứ tự Validation vs Auth**:
-   - `AuthGuard (Admin)` chạy đầu tiên.
-   - `ValidationPipe` chạy thứ hai để kiểm tra dữ liệu đầu vào.
-3. **Audit Log**: Mọi hành động của Admin (đặc biệt là thêm/xóa Pair hoặc đóng vị thế) **PHẢI** được log lại (`Logger` hoặc `AuditLogModel`) để phục vụ kiểm toán.
-4. **Tách biệt Controller**: Không gộp Admin methods vào Controller chung của User (ví dụ: `PairController` hiện tại chỉ nên có `GET`, còn `AdminPairController` sẽ giữ `POST/PATCH/DELETE`).
+Các Repository đã được nâng cấp để cung cấp các phương thức chuyên biệt dành cho Admin, cho phép can thiệp sâu vào dữ liệu mà không bị ràng buộc bởi các logic validation của User thông thường.
+
+### 2.1. AdminRepository
+
+- Quản lý tài khoản Admin (tạo mới, đổi mật khẩu, quản lý role).
+- Xác thực JWT và kiểm tra trạng thái hoạt động của Admin.
+
+### 2.2. PairRepository (Admin Methods)
+
+- `findAllPaginated`: Lấy danh sách cặp tiền có phân trang và lọc theo trạng thái.
+- `updatePair`: Cập nhật các thông số đòn bẩy, phí, khối lượng tối thiểu.
+- `bulkActivate / bulkDeactivate`: Bật/tắt hàng loạt cặp giao dịch.
+- `bulkDelete`: Xóa hàng loạt cặp giao dịch.
+
+### 2.3. UserRepository (Admin Methods)
+
+- `findAllIncludeDeleted`: Xem danh sách tất cả user (kể cả những user đã bị soft-delete).
+- `updateUser / setRole`: Thay đổi thông tin cơ bản và vai trò của user.
+- `activate / deactivate`: Kích hoạt hoặc vô hiệu hóa tài khoản user.
+- `hardDelete`: Xóa vĩnh viễn user khỏi hệ thống.
+
+### 2.4. PositionRepository (Admin Methods)
+
+- `findAllIncludeDeleted`: Giám sát toàn bộ vị thế của hệ thống (kể cả đã xóa).
+- `adminUpdate`: Cho phép Admin ghi đè (override) các thông số: SL, TP, Leverage, Status, PnL, Entry/Exit Price.
+- `bulkClose`: Cưỡng chế đóng hàng loạt vị thế trong trường hợp khẩn cấp.
+- `hardDelete`: Xóa vĩnh viễn vị thế khỏi cơ sở dữ liệu.
+
+### 2.5. WalletRepository (Admin Methods)
+
+- `setBalance / setTradeBalance`: Thiết lập trực tiếp số dư (Override) cho mục đích điều chỉnh sai sót.
+- `adjustBalance / adjustTradeBalance`: Cộng hoặc trừ số dư một cách linh hoạt.
+- `resetTotals`: Đặt lại tổng số tiền đã nạp/rút về 0.
+- `deleteWallet`: Xóa ví người dùng.
 
 ---
 
-## 4. Kế hoạch Refactor Test
+## 3. Danh mục các Admin Controller (Kế hoạch triển khai)
 
-Dựa trên tài liệu này, chúng ta sẽ:
+Mọi Admin Controller **PHẢI** được bảo vệ bởi `AdminAuthGuard` và sử dụng tiền tố `/admin/`.
 
-1. Tạo các Admin Controller tương ứng.
-2. Di chuyển logic `POST/PATCH/DELETE` từ các Controller hiện tại sang Admin Controller.
-3. Cập nhật lại Test Suites để đảm bảo kiểm tra đúng cả quyền Admin (ví dụ: Test trường hợp user thường gọi API admin phải trả về `403 Forbidden`).
+### 3.1. AdminAuthController (Đã triển khai)
+
+- `POST /admin/auth/login`: Đăng nhập lấy JWT.
+- `GET /admin/auth/me`: Kiểm tra thông tin admin hiện tại.
+
+### 3.2. AdminPairController
+
+- `GET /admin/pairs`: Danh sách cặp tiền.
+- `POST /admin/pairs`: Thêm cặp tiền mới.
+- `PATCH /admin/pairs/:instId`: Cập nhật cấu hình cặp tiền.
+- `DELETE /admin/pairs/:instId`: Xóa cặp tiền.
+
+### 3.3. AdminUserController
+
+- `GET /admin/users`: Danh sách người dùng hệ thống.
+- `PATCH /admin/users/:walletAddress`: Cập nhật trạng thái/vai trò.
+- `DELETE /admin/users/:walletAddress`: Xóa người dùng.
+
+### 3.4. AdminPositionController
+
+- `GET /admin/positions`: Tra cứu tất cả vị thế đang mở/đã đóng.
+- `PATCH /admin/positions/:id`: Điều chỉnh thông số vị thế (Admin Override).
+- `POST /admin/positions/:id/close-force`: Cưỡng chế đóng lệnh.
+
+### 3.5. AdminWalletController
+
+- `GET /admin/wallets`: Xem số dư của tất cả các ví.
+- `POST /admin/wallets/:walletAddress/adjust`: Điều chỉnh số dư (Cộng/Trừ).
+- `PATCH /admin/wallets/:walletAddress/override`: Thiết lập lại số dư chính xác.
+
+---
+
+## 4. Quy tắc bảo mật và triển khai
+
+1. **Guard layers**:
+   - Tầng 1: `AdminAuthGuard` (Kiểm tra JWT và tính hợp lệ của Admin ID).
+   - Tầng 2: `RolesGuard` (Kiểm tra quyền hạn cụ thể: `super_admin` vs `operator`).
+2. **Audit Logging**: Mọi hành động can thiệp vào `Mutation` của Admin (setBalance, forceClose, updatePair) **BẮT BUỘC** phải ghi log chi tiết (Ai thực hiện, khi nào, giá trị cũ/mới).
+3. **Tách biệt Service**: Các Admin Controller có thể gọi trực tiếp Repository hoặc thông qua các `AdminService` riêng biệt để tránh làm phình to (bloat) các Service chính dành cho người dùng.
+4. **Environment Safety**: Các API nguy hiểm (hardDelete, overrideBalance) có thể bị vô hiệu hóa trong môi trường Production thông qua biến môi trường nếu cần thiết.
