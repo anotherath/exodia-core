@@ -1,22 +1,31 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { WalletRepository } from 'src/repositories/wallet/wallet.repository';
+import { WalletValidationService } from './wallet-validation.service';
 
 @Injectable()
 export class WalletService {
-  constructor(private readonly repo: WalletRepository) {}
+  constructor(
+    private readonly repo: WalletRepository,
+    private readonly walletValidation: WalletValidationService,
+  ) {}
 
   async getWallet(walletAddress: string, chainId: number) {
+    this.walletValidation.validateWalletAddress(walletAddress);
+    this.walletValidation.validateChainId(chainId);
     return this.repo.upsert(walletAddress, chainId);
   }
 
   // Chuyển tiền vào quỹ giao dịch
   async depositToTrade(walletAddress: string, chainId: number, amount: number) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
-    }
+    this.walletValidation.validateTransaction({
+      walletAddress,
+      chainId,
+      amount,
+    });
+
     const wallet = await this.repo.find(walletAddress, chainId);
     if (!wallet || wallet.balance < amount) {
-      throw new BadRequestException('Insufficient balance');
+      throw new BadRequestException('Số dư khả dụng không đủ');
     }
     await this.repo.depositToTrade(walletAddress, chainId, amount);
   }
@@ -27,18 +36,25 @@ export class WalletService {
     chainId: number,
     amount: number,
   ) {
-    if (amount <= 0) {
-      throw new BadRequestException('Amount must be positive');
-    }
+    this.walletValidation.validateTransaction({
+      walletAddress,
+      chainId,
+      amount,
+    });
+
     const wallet = await this.repo.find(walletAddress, chainId);
     if (!wallet || wallet.tradeBalance < amount) {
-      throw new BadRequestException('Insufficient trade balance');
+      throw new BadRequestException('Số dư giao dịch không đủ');
     }
     await this.repo.withdrawFromTrade(walletAddress, chainId, amount);
   }
 
   // Cập nhật PnL khi đóng lệnh
   async updateTradePnL(walletAddress: string, chainId: number, pnl: number) {
+    // Không cần validation phức tạp ở đây vì hệ thống gọi ngầm, nhưng kiểm tra địa chỉ cho chắc
+    this.walletValidation.validateWalletAddress(walletAddress);
+    this.walletValidation.validateChainId(chainId);
+
     const wallet = await this.repo.find(walletAddress, chainId);
     if (!wallet) return;
 
