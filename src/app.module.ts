@@ -7,6 +7,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { MarketModule } from './modules/market/market.module';
 import { PairModule } from './modules/pair/pair.module';
 import { PositionModule } from './modules/position/position.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './infra/redis/redis.module';
 import { ThrottlerExceptionFilter } from './shared/filters/throttler-exception.filter';
 import { throttlerConfig } from './config/throttler.config';
@@ -40,6 +41,7 @@ import { throttlerConfig } from './config/throttler.config';
     MarketModule,
     PairModule,
     PositionModule,
+    AdminModule,
     RedisModule,
   ],
   providers: [

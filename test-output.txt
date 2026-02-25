@@ -1,0 +1,95 @@
+﻿node.exe : PASS src/repositories/admin/
+__tests__/admin.repository.spec.ts
+At C:\Program Files\nodejs\npx.ps1:29 
+char:3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpeci 
+   fied: (PASS src/reposi...ository.s  
+  pec.ts:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCo 
+   mmandError
+ 
+  AdminRepository
+    findByUsername
+      ΓêÜ should return admin by 
+username (lowercased and trimmed) (7 
+ms)
+      ΓêÜ should return null when 
+admin not found (1 ms)
+    findById
+      ΓêÜ should return active admin 
+by id (1 ms)
+      ΓêÜ should return null for 
+inactive admin
+    create
+      ΓêÜ should create admin with 
+lowercased username (1 ms)
+      ΓêÜ should default role to 
+operator
+    updateLastLogin
+      ΓêÜ should update lastLoginAt to 
+current time (2 ms)
+      ΓêÜ should return void (1 ms)
+    updatePassword
+      ΓêÜ should update passwordHash 
+(1 ms)
+      ΓêÜ should return void
+    existsByUsername
+      ΓêÜ should return true when 
+username exists (2 ms)
+      ΓêÜ should return false when 
+username does not exist
+      ΓêÜ should lowercase and trim 
+username
+
+PASS src/modules/admin/__tests__/admin-
+auth.service.spec.ts
+  AdminAuthService
+    login
+      ΓêÜ should return accessToken 
+and admin info on successful login (9 
+ms)
+      ΓêÜ should throw 
+UnauthorizedException when username 
+not found (22 ms)
+      ΓêÜ should throw 
+UnauthorizedException when admin is 
+inactive (2 ms)
+      ΓêÜ should throw 
+UnauthorizedException when password is 
+wrong (2 ms)
+      ΓêÜ should not reveal whether 
+username or password is wrong (3 ms)
+    validateToken
+      ΓêÜ should return admin info for 
+valid token payload (2 ms)
+      ΓêÜ should return null for 
+non-admin token type (2 ms)
+      ΓêÜ should return null when 
+admin not found (2 ms)
+      ΓêÜ should return null when 
+admin is inactive (1 ms)
+    createAdmin
+      ΓêÜ should create a new admin 
+with hashed password (2 ms)
+      ΓêÜ should create admin with 
+specified role (1 ms)
+      ΓêÜ should throw 
+ConflictException when username 
+already exists (1 ms)
+    changePassword
+      ΓêÜ should change password when 
+current password is correct (2 ms)
+      ΓêÜ should throw 
+UnauthorizedException when admin not 
+found (1 ms)
+      ΓêÜ should throw 
+UnauthorizedException when current 
+password is wrong (1 ms)
+
+Test Suites: 2 passed, 2 total
+Tests:       28 passed, 28 total
+Snapshots:   0 total
+Time:        2.446 s
+Ran all test suites matching admin.
