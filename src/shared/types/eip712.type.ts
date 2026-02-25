@@ -1,9 +1,7 @@
+import { eip712Config } from 'src/config/eip712.config';
+
 // Domain chung cho tất cả EIP-712 messages
-export const EIP712_DOMAIN = {
-  name: 'Exodia',
-  version: '1',
-  chainId: 1,
-} as const;
+export const EIP712_DOMAIN = eip712Config;
 
 // ===== OPEN ORDER =====
 export const OpenOrderTypes = {
