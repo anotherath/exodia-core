@@ -7,12 +7,14 @@ import {
   type ActivateUserValue,
 } from 'src/shared/types/eip712.type';
 import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
+import { UserValidationService } from './user-validation.service';
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly nonceRepo: NonceRepository,
     private readonly userRepo: UserRepository,
+    private readonly userValidation: UserValidationService,
   ) {}
 
   // kích hoạt người dùng (Login via EIP-712)
@@ -21,6 +23,9 @@ export class UserService {
     signature: HexString,
   ): Promise<boolean> {
     try {
+      this.userValidation.validateActivateData(typedData as any);
+      this.userValidation.validateSignature(signature);
+
       const walletAddress = typedData.walletAddress as HexString;
 
       // 1. Kiểm tra nonce hợp lệ trong DB
@@ -59,7 +64,10 @@ export class UserService {
 
   // kiểm tra xem người dùng active hay chưa
   async isActiveUser(walletAddress: HexString): Promise<boolean> {
-    const user = await this.userRepo.findByWallet(walletAddress);
+    const validatedAddress =
+      this.userValidation.validateWalletAddress(walletAddress);
+
+    const user = await this.userRepo.findByWallet(validatedAddress);
 
     // chưa tồn tại hoặc bị soft delete → chưa active
     if (!user) return false;
