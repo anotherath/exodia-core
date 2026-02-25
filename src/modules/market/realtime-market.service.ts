@@ -4,6 +4,7 @@ import { RealTimeGateway } from './realtime-market.gateway';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { TickerData } from 'src/shared/types/okx.type';
 import { PairService } from '../pair/pair.service';
+import { MarketValidationService } from './market-validation.service';
 
 @Injectable()
 export class RealTimeService implements OnModuleInit {
@@ -14,6 +15,7 @@ export class RealTimeService implements OnModuleInit {
     private readonly rtGateway: RealTimeGateway,
     private readonly marketPriceRepo: RealtimeMarketPriceRepository,
     private readonly pairService: PairService,
+    private readonly marketValidation: MarketValidationService,
   ) {}
 
   async onModuleInit() {
@@ -42,10 +44,18 @@ export class RealTimeService implements OnModuleInit {
    * Handle incoming ticker data from OKX.
    */
   private async onTicker(ticker: TickerData) {
-    // Update In-Memory Cache (Now Redis backed)
+    // 1. Validate toàn bộ ticker (bid/ask, last, spread)
+    const result = this.marketValidation.validateTickerData(ticker);
+
+    if (!result.valid) {
+      this.logger.warn(`[${ticker.instId}] ${result.reason}. Dropping update.`);
+      return;
+    }
+
+    // 2. Cập nhật Cache (Redis)
     await this.marketPriceRepo.update(ticker);
 
-    // Push to WebSocket clients
+    // 3. Đẩy dữ liệu qua WebSocket cho Client
     this.rtGateway.emitTicker(ticker);
 
     // Debug log
