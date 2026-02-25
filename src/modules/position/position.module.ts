@@ -8,15 +8,15 @@ import { PositionValidationService } from './position-validation.service';
 
 import { MarketModule } from '../market/market.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { NonceModule } from '../nonce/nonce.module';
 
 @Module({
-  imports: [MarketModule, WalletModule],
+  imports: [MarketModule, WalletModule, NonceModule],
   controllers: [PositionController],
   providers: [
     PositionService,
     PositionRepository,
     PairRepository,
-    NonceRepository,
     PositionValidationService,
   ],
   exports: [PositionService, PositionRepository],

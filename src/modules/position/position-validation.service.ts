@@ -1,12 +1,11 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
-import { NonceRepository } from 'src/repositories/cache/nonce.cache';
+import { NonceService } from 'src/modules/nonce/nonce.service';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import { Pair } from 'src/shared/types/pair.type';
 import type { HexString } from 'src/shared/types/web3.type';
-import { verifyTypedDataSignature } from 'src/shared/utils/eip712.util';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { WalletService } from '../wallet/wallet.service';
 import {
@@ -20,7 +19,7 @@ import { EIP712_DOMAIN } from 'src/shared/types/eip712.type';
 export class PositionValidationService {
   constructor(
     @InjectRedis() private readonly redis: Redis,
-    private readonly nonceRepo: NonceRepository,
+    private readonly nonceService: NonceService,
     private readonly pairRepo: PairRepository,
     private readonly marketPriceRepo: RealtimeMarketPriceRepository,
     private readonly walletService: WalletService,
@@ -94,38 +93,6 @@ export class PositionValidationService {
     }
 
     return pair;
-  }
-
-  // Xác thực chữ ký và tiêu thụ nonce
-  async verifyAndConsumeNonce(params: {
-    walletAddress: HexString;
-    nonce: string;
-    signature: HexString;
-    types: Record<string, readonly { name: string; type: string }[]>;
-    primaryType: string;
-    message: Record<string, unknown>;
-  }): Promise<void> {
-    const { walletAddress, nonce, signature, types, primaryType, message } =
-      params;
-
-    const nonceInfo = await this.nonceRepo.findValid(walletAddress);
-    if (!nonceInfo || nonceInfo.nonce !== nonce) {
-      throw new BadRequestException('Nonce không hợp lệ hoặc đã hết hạn');
-    }
-
-    const isValid = await verifyTypedDataSignature({
-      types,
-      primaryType,
-      message,
-      signature,
-      walletAddress,
-    });
-
-    if (!isValid) {
-      throw new BadRequestException('Chữ ký không hợp lệ');
-    }
-
-    await this.nonceRepo.delete(walletAddress);
   }
 
   // Kiểm tra tính hợp lệ giá đặt cho lệnh Limit

@@ -8,7 +8,7 @@ import { InjectRedis } from '@nestjs-modules/ioredis';
 import Redis from 'ioredis';
 import { randomUUID } from 'crypto';
 import { PositionRepository } from 'src/repositories/position/position.repository';
-import { NonceRepository } from 'src/repositories/cache/nonce.cache';
+import { NonceService } from '../nonce/nonce.service';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { Position } from 'src/shared/types/position.type';
 import type { HexString } from 'src/shared/types/web3.type';
@@ -41,6 +41,7 @@ export class PositionService {
 
   constructor(
     @InjectRedis() private readonly redis: Redis,
+    private readonly nonceService: NonceService,
     private readonly repo: PositionRepository,
     private readonly pairRepo: PairRepository,
     private readonly marketPriceRepo: RealtimeMarketPriceRepository,
@@ -55,7 +56,7 @@ export class PositionService {
     signature: HexString,
   ) {
     // Verify signature trước lock (không cần lock cho bước này)
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -131,7 +132,7 @@ export class PositionService {
     typedData: OpenOrderValue,
     signature: HexString,
   ) {
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -207,7 +208,7 @@ export class PositionService {
     typedData: UpdateOrderValue,
     signature: HexString,
   ) {
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -242,7 +243,7 @@ export class PositionService {
     typedData: UpdatePositionValue,
     signature: HexString,
   ) {
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -352,7 +353,7 @@ export class PositionService {
     typedData: CancelOrderValue,
     signature: HexString,
   ) {
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,
@@ -375,7 +376,7 @@ export class PositionService {
     typedData: ClosePositionValue,
     signature: HexString,
   ) {
-    await this.validator.verifyAndConsumeNonce({
+    await this.nonceService.verifyAndConsume({
       walletAddress: typedData.walletAddress as HexString,
       nonce: typedData.nonce,
       signature,

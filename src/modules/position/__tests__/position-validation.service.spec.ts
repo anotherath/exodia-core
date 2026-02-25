@@ -1,21 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { PositionValidationService } from '../position-validation.service';
-import { NonceRepository } from 'src/repositories/cache/nonce.cache';
+import { NonceService } from 'src/modules/nonce/nonce.service';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
 import { WalletService } from '../../wallet/wallet.service';
-import * as eip712Util from 'src/shared/utils/eip712.util';
 import { HexString } from 'src/shared/types/web3.type';
 import { getRedisConnectionToken } from '@nestjs-modules/ioredis';
 
-jest.mock('src/shared/utils/eip712.util', () => ({
-  verifyTypedDataSignature: jest.fn(),
-}));
-
 describe('PositionValidationService', () => {
   let service: PositionValidationService;
-  let nonceRepo: jest.Mocked<NonceRepository>;
+  let nonceService: jest.Mocked<NonceService>;
   let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
   let pairRepo: jest.Mocked<PairRepository>;
   let redisMock: Record<string, jest.Mock>;
@@ -37,10 +32,9 @@ describe('PositionValidationService', () => {
           useValue: redisMock,
         },
         {
-          provide: NonceRepository,
+          provide: NonceService,
           useValue: {
-            findValid: jest.fn(),
-            delete: jest.fn(),
+            verifyAndConsume: jest.fn(),
           },
         },
         {
@@ -63,48 +57,9 @@ describe('PositionValidationService', () => {
     }).compile();
 
     service = module.get<PositionValidationService>(PositionValidationService);
-    nonceRepo = module.get(NonceRepository);
+    nonceService = module.get(NonceService);
     marketPriceRepo = module.get(RealtimeMarketPriceRepository);
     pairRepo = module.get(PairRepository);
-  });
-
-  describe('verifyAndConsumeNonce', () => {
-    const params = {
-      walletAddress: '0x123' as HexString,
-      nonce: 'n1',
-      signature: '0xsig' as HexString,
-      types: {},
-      primaryType: 'T',
-      message: {},
-    };
-
-    it('should success and delete nonce', async () => {
-      nonceRepo.findValid.mockResolvedValue({ nonce: 'n1' } as any);
-      (eip712Util.verifyTypedDataSignature as jest.Mock).mockResolvedValue(
-        true,
-      );
-
-      await service.verifyAndConsumeNonce(params);
-
-      expect(nonceRepo.delete).toHaveBeenCalledWith('0x123');
-    });
-
-    it('should throw if nonce invalid', async () => {
-      nonceRepo.findValid.mockResolvedValue(null);
-      await expect(service.verifyAndConsumeNonce(params)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
-
-    it('should throw if signature invalid', async () => {
-      nonceRepo.findValid.mockResolvedValue({ nonce: 'n1' } as any);
-      (eip712Util.verifyTypedDataSignature as jest.Mock).mockResolvedValue(
-        false,
-      );
-      await expect(service.verifyAndConsumeNonce(params)).rejects.toThrow(
-        BadRequestException,
-      );
-    });
   });
 
   describe('validateLimitPrice', () => {
@@ -184,8 +139,6 @@ describe('PositionValidationService', () => {
 
   describe('validateSLTP', () => {
     it('should validate SL/TP relative to reference price for Long', () => {
-      // Long: SL must be < referencePrice, negative SL still satisfies sl < referencePrice
-      // so it won't throw here (validatePositiveNumbers handles <= 0 separately)
       expect(() => service.validateSLTP('long', 100, 50, null)).not.toThrow();
       expect(() => service.validateSLTP('long', 100, null, 150)).not.toThrow();
     });

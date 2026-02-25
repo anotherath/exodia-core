@@ -6,5 +6,6 @@ import { NonceRepository } from 'src/repositories/cache/nonce.cache';
 @Module({
   controllers: [NonceController],
   providers: [NonceService, NonceRepository],
+  exports: [NonceService],
 })
 export class NonceModule {}

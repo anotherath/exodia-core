@@ -4,6 +4,7 @@ import { PositionService } from '../position.service';
 import { PositionRepository } from 'src/repositories/position/position.repository';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-market-price.cache';
+import { NonceService } from 'src/modules/nonce/nonce.service';
 import { PositionValidationService } from '../position-validation.service';
 import { WalletService } from '../../wallet/wallet.service';
 import { Position } from 'src/shared/types/position.type';
@@ -16,6 +17,7 @@ describe('PositionService', () => {
   let repo: jest.Mocked<PositionRepository>;
   let pairRepo: jest.Mocked<PairRepository>;
   let marketPriceRepo: jest.Mocked<RealtimeMarketPriceRepository>;
+  let nonceService: jest.Mocked<NonceService>;
   let validator: jest.Mocked<PositionValidationService>;
   let walletService: jest.Mocked<WalletService>;
   let redisMock: Record<string, jest.Mock>;
@@ -83,9 +85,14 @@ describe('PositionService', () => {
           },
         },
         {
+          provide: NonceService,
+          useValue: {
+            verifyAndConsume: jest.fn(),
+          },
+        },
+        {
           provide: PositionValidationService,
           useValue: {
-            verifyAndConsumeNonce: jest.fn(),
             validateSymbolAndParams: jest.fn(),
             validateLimitPrice: jest.fn(),
             validateSLTP: jest.fn(),
@@ -110,6 +117,7 @@ describe('PositionService', () => {
     repo = module.get(PositionRepository);
     pairRepo = module.get(PairRepository);
     marketPriceRepo = module.get(RealtimeMarketPriceRepository);
+    nonceService = module.get(NonceService);
     validator = module.get(PositionValidationService);
     walletService = module.get(WalletService);
   });
