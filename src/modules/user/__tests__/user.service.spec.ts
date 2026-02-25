@@ -7,6 +7,8 @@ import { HexString } from 'src/shared/types/web3.type';
 import { ActivateUserValue } from 'src/shared/types/eip712.type';
 import * as eip712Util from 'src/shared/utils/eip712.util';
 
+import { UserValidationService } from '../user-validation.service';
+
 // Mock NonceRepository
 jest.mock('src/repositories/cache/nonce.cache');
 
@@ -19,10 +21,12 @@ describe('UserService', () => {
   let service: UserService;
   let nonceRepo: jest.Mocked<NonceRepository>;
   let userRepo: UserRepository;
+  let userValidation: UserValidationService;
 
   const walletAddress = '0x1111111111111111111111111111111111111111';
   const fakeNonce = 'fake_nonce';
-  const fakeSignature = '0xFAKE_SIGNATURE' as HexString;
+  const fakeSignature =
+    '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef01' as HexString;
 
   const activateData: ActivateUserValue = {
     walletAddress,
@@ -34,7 +38,8 @@ describe('UserService', () => {
     await connectTestDB();
     nonceRepo = new NonceRepository(null as any) as any;
     userRepo = new UserRepository();
-    service = new UserService(nonceRepo, userRepo);
+    userValidation = new UserValidationService();
+    service = new UserService(nonceRepo, userRepo, userValidation);
   });
 
   afterAll(async () => {

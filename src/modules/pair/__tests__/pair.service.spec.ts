@@ -3,11 +3,13 @@ import { PairService } from '../pair.service';
 import { PairRepository } from 'src/repositories/pair/pair.repository';
 import { OkxWs } from 'src/infra/okx/okx.ws';
 import { Pair } from 'src/shared/types/pair.type';
+import { PairValidationService } from '../pair-validation.service';
 
 describe('PairService', () => {
   let service: PairService;
   let repo: PairRepository;
   let okxWs: OkxWs;
+  let validation: PairValidationService;
 
   const mockPair: Pair = {
     instId: 'BTC-USDT',
@@ -33,18 +35,25 @@ describe('PairService', () => {
     unsubscribe: jest.fn(),
   };
 
+  const mockValidation = {
+    validateInstId: jest.fn(),
+    validateUpsertData: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PairService,
         { provide: PairRepository, useValue: mockPairRepo },
         { provide: OkxWs, useValue: mockOkxWs },
+        { provide: PairValidationService, useValue: mockValidation },
       ],
     }).compile();
 
     service = module.get<PairService>(PairService);
     repo = module.get<PairRepository>(PairRepository);
     okxWs = module.get<OkxWs>(OkxWs);
+    validation = module.get<PairValidationService>(PairValidationService);
 
     jest.clearAllMocks();
   });

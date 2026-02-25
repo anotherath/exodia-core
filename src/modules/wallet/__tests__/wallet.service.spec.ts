@@ -4,10 +4,12 @@ import { WalletRepository } from 'src/repositories/wallet/wallet.repository';
 import { connectTestDB, closeTestDB } from 'test/mongo-memory';
 import { BadRequestException } from '@nestjs/common';
 import { WalletModel } from 'src/repositories/wallet/wallet.model';
+import { WalletValidationService } from '../wallet-validation.service';
 
 describe('WalletService', () => {
   let service: WalletService;
   let repo: WalletRepository;
+  let walletValidation: WalletValidationService;
 
   const WALLET = '0x1234567890123456789012345678901234567890';
   const CHAIN = 1;
@@ -20,7 +22,7 @@ describe('WalletService', () => {
     await connectTestDB();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [WalletService, WalletRepository],
+      providers: [WalletService, WalletRepository, WalletValidationService],
     }).compile();
 
     service = module.get<WalletService>(WalletService);
