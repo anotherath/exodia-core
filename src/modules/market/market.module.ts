@@ -7,12 +7,14 @@ import { RealtimeMarketPriceRepository } from 'src/repositories/cache/realtime-m
 import { MarketHistoryCacheRepository } from 'src/repositories/cache/market-history.cache';
 import { PairModule } from '../pair/pair.module';
 import { OkxInfraModule } from 'src/infra/okx/okx-infra.module';
+import { MarketValidationService } from './market-validation.service';
 
 @Module({
   imports: [PairModule, OkxInfraModule],
   controllers: [MarketController],
   providers: [
     MarketService,
+    MarketValidationService,
     RealTimeGateway,
     RealTimeService,
     RealtimeMarketPriceRepository,

@@ -1,4 +1,4 @@
-import { Controller, Get, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { MarketService } from './market.service';
@@ -44,15 +44,9 @@ export class MarketController {
   getCandles(
     @Query('instId') instId: string,
     @Query('bar') bar = '1m',
-    @Query('limit') limit = 100,
+    @Query('limit') limit = okxConfig.maxCandlesLimit,
     @Query('before') before?: string,
   ) {
-    if (!okxConfig.candleBars.includes(bar)) {
-      throw new BadRequestException(
-        `Khung nến '${bar}' không được hỗ trợ. Các khung hợp lệ: ${okxConfig.candleBars.join(', ')}`,
-      );
-    }
-
     return this.marketService.getCandles({
       instId,
       bar,

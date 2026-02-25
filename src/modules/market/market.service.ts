@@ -4,6 +4,7 @@ import {
   MarketHistoryCacheRepository,
   OkxCandle,
 } from 'src/repositories/cache/market-history.cache';
+import { MarketValidationService } from './market-validation.service';
 
 /** Thời gian chờ tối đa khi bị block bởi lock (ms) */
 const LOCK_WAIT_MS = 300;
@@ -31,6 +32,7 @@ export class MarketService {
   constructor(
     private readonly okxRest: OkxRest,
     private readonly cacheRepo: MarketHistoryCacheRepository,
+    private readonly marketValidation: MarketValidationService,
   ) {}
 
   async getCandles(params: {
@@ -39,6 +41,7 @@ export class MarketService {
     limit: number;
     before?: string;
   }) {
+    this.marketValidation.validateCandleParams(params);
     const { instId, bar, limit, before } = params;
 
     // ── Bước 1: Kiểm tra cache ──
