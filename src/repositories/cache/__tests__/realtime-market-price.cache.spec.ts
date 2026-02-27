@@ -82,4 +82,26 @@ describe('RealtimeMarketPriceRepository', () => {
     const result = await repository.get('BTC-USDT');
     expect(result?.last).toBe('51000');
   });
+
+  describe('getAllSymbols', () => {
+    it('should return list of instrument IDs by stripping prefix', async () => {
+      redis.keys.mockResolvedValue([
+        'market:price:BTC-USDT',
+        'market:price:ETH-USDT',
+      ]);
+
+      const symbols = await repository.getAllSymbols();
+
+      expect(symbols).toEqual(['BTC-USDT', 'ETH-USDT']);
+      expect(redis.keys).toHaveBeenCalledWith('market:price:*');
+    });
+
+    it('should return empty array if no keys found', async () => {
+      redis.keys.mockResolvedValue([]);
+
+      const symbols = await repository.getAllSymbols();
+
+      expect(symbols).toEqual([]);
+    });
+  });
 });
