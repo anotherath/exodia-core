@@ -1,10 +1,12 @@
 import { AdminAuthService } from '../admin-auth.service';
 import { AdminRepository } from 'src/repositories/admin/admin.repository';
+import { AdminAuthCacheRepository } from 'src/repositories/cache/admin-auth.cache';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException, ConflictException } from '@nestjs/common';
 
 // Mock dependencies
 jest.mock('src/repositories/admin/admin.repository');
+jest.mock('src/repositories/cache/admin-auth.cache');
 jest.mock('bcryptjs', () => ({
   compare: jest.fn(),
   hash: jest.fn(),
@@ -16,6 +18,7 @@ import * as bcrypt from 'bcryptjs';
 describe('AdminAuthService', () => {
   let service: AdminAuthService;
   let adminRepo: jest.Mocked<AdminRepository>;
+  let adminAuthCacheRepo: jest.Mocked<AdminAuthCacheRepository>;
   let jwtService: jest.Mocked<JwtService>;
 
   const mockAdmin = {
@@ -29,12 +32,25 @@ describe('AdminAuthService', () => {
 
   beforeEach(() => {
     adminRepo = new AdminRepository() as jest.Mocked<AdminRepository>;
+    adminAuthCacheRepo = new AdminAuthCacheRepository(
+      {} as any,
+    ) as jest.Mocked<AdminAuthCacheRepository>;
+
+    // Mock cache repo methods
+    adminAuthCacheRepo.getLockoutRemainingTimeSeconds = jest
+      .fn()
+      .mockResolvedValue(0);
+    adminAuthCacheRepo.incrementFailedLogin = jest.fn().mockResolvedValue(1);
+    adminAuthCacheRepo.resetFailedLogin = jest
+      .fn()
+      .mockResolvedValue(undefined);
+
     jwtService = {
       sign: jest.fn().mockReturnValue('mock-jwt-token'),
       verify: jest.fn(),
     } as any;
 
-    service = new AdminAuthService(adminRepo, jwtService);
+    service = new AdminAuthService(adminRepo, adminAuthCacheRepo, jwtService);
     jest.clearAllMocks();
   });
 

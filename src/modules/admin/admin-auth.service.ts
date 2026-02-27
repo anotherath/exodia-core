@@ -6,6 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { AdminRepository } from 'src/repositories/admin/admin.repository';
+import { AdminAuthCacheRepository } from 'src/repositories/cache/admin-auth.cache';
 import { ADMIN_CONFIG } from 'src/config/admin.config';
 import { AdminRole } from 'src/shared/types/admin.type';
 
@@ -13,6 +14,7 @@ import { AdminRole } from 'src/shared/types/admin.type';
 export class AdminAuthService {
   constructor(
     private readonly adminRepo: AdminRepository,
+    private readonly adminAuthCacheRepo: AdminAuthCacheRepository,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -27,9 +29,22 @@ export class AdminAuthService {
     accessToken: string;
     admin: { username: string; role: AdminRole };
   }> {
+    // 0. Kiểm tra số lần nhập sai từ Redis
+    const lockTimeRemaining =
+      await this.adminAuthCacheRepo.getLockoutRemainingTimeSeconds(username);
+
+    if (lockTimeRemaining > 0) {
+      const remainingMinutes = Math.ceil(lockTimeRemaining / 60);
+      throw new UnauthorizedException(
+        `Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau ${remainingMinutes} phút`,
+      );
+    }
+
     // 1. Tìm admin theo username
     const admin = await this.adminRepo.findByUsername(username);
     if (!admin) {
+      // Dù username sai, vẫn tăng đếm để chống rà quét username hợp lệ
+      await this.handleFailedLogin(username);
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không đúng');
     }
 
@@ -41,8 +56,12 @@ export class AdminAuthService {
     // 3. So sánh mật khẩu
     const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
     if (!isPasswordValid) {
+      await this.handleFailedLogin(username);
       throw new UnauthorizedException('Tài khoản hoặc mật khẩu không đúng');
     }
+
+    // Đăng nhập thành công -> Reset bộ đếm
+    await this.adminAuthCacheRepo.resetFailedLogin(username);
 
     // 4. Tạo JWT
     const payload = {
@@ -64,6 +83,19 @@ export class AdminAuthService {
         role: admin.role,
       },
     };
+  }
+
+  // ════════════════════════════════════════
+  //  Helper xử lý đăng nhập sai
+  // ════════════════════════════════════════
+  private async handleFailedLogin(username: string): Promise<void> {
+    const fails = await this.adminAuthCacheRepo.incrementFailedLogin(username);
+
+    if (fails >= ADMIN_CONFIG.MAX_LOGIN_ATTEMPTS) {
+      throw new UnauthorizedException(
+        `Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau ${ADMIN_CONFIG.LOCKOUT_DURATION_MINUTES} phút`,
+      );
+    }
   }
 
   // ════════════════════════════════════════

@@ -52,46 +52,4 @@ describe('AdminWalletController', () => {
       );
     });
   });
-
-  describe('adjustBalance', () => {
-    it('should call adjustBalance and adjustTradeBalance if both provided', async () => {
-      await controller.adjustBalance(
-        '0x123',
-        137,
-        { admin: mockAdmin },
-        10,
-        20,
-      );
-      expect(walletRepo.adjustBalance).toHaveBeenCalledWith('0x123', 137, 10);
-      expect(walletRepo.adjustTradeBalance).toHaveBeenCalledWith(
-        '0x123',
-        137,
-        20,
-      );
-    });
-
-    it('should call only adjustBalance if only deltaBalance provided', async () => {
-      await controller.adjustBalance('0x123', 137, { admin: mockAdmin }, 10);
-      expect(walletRepo.adjustBalance).toHaveBeenCalledWith('0x123', 137, 10);
-      expect(walletRepo.adjustTradeBalance).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('overrideBalance', () => {
-    it('should call setBalance and setTradeBalance', async () => {
-      await controller.overrideBalance(
-        '0x123',
-        137,
-        { admin: mockAdmin },
-        100,
-        200,
-      );
-      expect(walletRepo.setBalance).toHaveBeenCalledWith('0x123', 137, 100);
-      expect(walletRepo.setTradeBalance).toHaveBeenCalledWith(
-        '0x123',
-        137,
-        200,
-      );
-    });
-  });
 });

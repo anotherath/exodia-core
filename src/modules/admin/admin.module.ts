@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminRepository } from 'src/repositories/admin/admin.repository';
+import { AdminAuthCacheRepository } from 'src/repositories/cache/admin-auth.cache';
 import { AdminAuthGuard } from 'src/shared/guards/admin-auth.guard';
 import { ADMIN_CONFIG } from 'src/config/admin.config';
 
@@ -33,6 +34,7 @@ import { WalletRepository } from 'src/repositories/wallet/wallet.repository';
   providers: [
     AdminAuthService,
     AdminRepository,
+    AdminAuthCacheRepository,
     AdminAuthGuard,
     PairRepository,
     UserRepository,

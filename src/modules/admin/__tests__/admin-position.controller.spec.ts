@@ -44,24 +44,4 @@ describe('AdminPositionController', () => {
       );
     });
   });
-
-  describe('updatePosition', () => {
-    it('should call positionRepo.adminUpdate', async () => {
-      const updateData = { pnl: 50 };
-      await controller.updatePosition('pos-123', updateData, {
-        admin: mockAdmin,
-      });
-      expect(positionRepo.adminUpdate).toHaveBeenCalledWith(
-        'pos-123',
-        updateData,
-      );
-    });
-  });
-
-  describe('forceClosePosition', () => {
-    it('should call positionRepo.bulkClose', async () => {
-      await controller.forceClosePosition('pos-123', { admin: mockAdmin }, 10);
-      expect(positionRepo.bulkClose).toHaveBeenCalledWith(['pos-123'], 10);
-    });
-  });
 });

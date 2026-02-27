@@ -145,6 +145,16 @@ interface AdminErrorResponse {
 }
 ```
 
+**Response (401) — Tài khoản bị khóa do đăng nhập sai quá nhiều:**
+
+```json
+{
+  "statusCode": 401,
+  "message": "Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút",
+  "error": "Unauthorized"
+}
+```
+
 **Response (401) — Tài khoản bị vô hiệu hóa:**
 
 ```json
@@ -263,6 +273,7 @@ Content-Type: application/json
 | Status | Khi nào                        | Message                                        | Hành động FE                 |
 | ------ | ------------------------------ | ---------------------------------------------- | ---------------------------- |
 | 401    | Sai username hoặc password     | `Tài khoản hoặc mật khẩu không đúng`           | Hiện toast error             |
+| 401    | Đăng nhập sai nhiều lần        | `Tài khoản đã bị khóa do đăng nhập sai...`     | Hiện toast error + countdown |
 | 401    | Tài khoản bị khóa              | `Tài khoản đã bị vô hiệu hóa`                  | Hiện thông báo liên hệ admin |
 | 401    | Token thiếu                    | `Token không được cung cấp`                    | Redirect → login page        |
 | 401    | Token hết hạn                  | `Token không hợp lệ hoặc đã hết hạn`           | Redirect → login page        |

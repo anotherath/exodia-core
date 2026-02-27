@@ -97,11 +97,12 @@ Server kiểm tra token:
 | `src/modules/admin/dto/admin-login.dto.ts`   | Mô tả dữ liệu request login (cho Swagger docs)                                               |
 | `src/modules/admin/admin.module.ts`          | Nối tất cả lại với nhau: controller + service + repository + JWT module                      |
 
-### 📁 Bảo vệ (Guard)
+### 📁 Bảo vệ (Guard & Cache)
 
-| File                                    | Chức năng                                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/shared/guards/admin-auth.guard.ts` | **Bảo vệ** — kiểm tra token trong mọi request admin. Nếu token sai/hết hạn → chặn lại |
+| File                                         | Chức năng                                                                                   |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/shared/guards/admin-auth.guard.ts`      | **Bảo vệ** — kiểm tra token trong mọi request admin. Nếu token sai/hết hạn → chặn lại       |
+| `src/repositories/cache/admin-auth.cache.ts` | **Chống Spam** — Đếm số lần admin nhập sai mật khẩu qua Redis. Nếu sai 5 lần, khóa 15 phút. |
 
 ### 📁 Tiện ích (Scripts)
 
@@ -111,10 +112,10 @@ Server kiểm tra token:
 
 ### 📁 Tests
 
-| File                                                        | Số tests | Chức năng                                     |
-| ----------------------------------------------------------- | -------- | --------------------------------------------- |
-| `src/repositories/admin/__tests__/admin.repository.spec.ts` | 13       | Test các hàm truy vấn database                |
-| `src/modules/admin/__tests__/admin-auth.service.spec.ts`    | 15       | Test logic đăng nhập, tạo admin, đổi mật khẩu |
+| File                                                        | Số tests | Chức năng                                       |
+| ----------------------------------------------------------- | -------- | ----------------------------------------------- |
+| `src/repositories/admin/__tests__/admin.repository.spec.ts` | 13       | Test các hàm truy vấn database                  |
+| `src/modules/admin/__tests__/admin-auth.service.spec.ts`    | 15+      | Test logic đăng nhập, tạo admin, khóa tài khoản |
 
 ---
 
